@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drainage Infrastructure | City of Fair Oaks Ranch</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="https://js.arcgis.com/4.31/esri/themes/light/main.css">
+    <script src="https://js.arcgis.com/4.31/"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg: #FAF8F4;
+            --bg-card: #FFFFFF;
+            --bg-muted: #F2EFE9;
+            --accent: #1B3A2D;
+            --accent-light: #2D5E47;
+            --accent-wash: rgba(27, 58, 45, 0.06);
+            --accent-border: rgba(27, 58, 45, 0.12);
+            --text: #1B3A2D;
+            --text-secondary: #5A6B62;
+            --text-muted: #8A948E;
+            --border: #E5E1DA;
+            --green: #3A8A5C;
+            --green-bg: rgba(58, 138, 92, 0.08);
+            --amber: #C4860B;
+            --amber-bg: rgba(196, 134, 11, 0.08);
+            --red: #C0392B;
+            --red-bg: rgba(192, 57, 43, 0.08);
+            --gray: #8A948E;
+            --font-display: 'Playfair Display', Georgia, serif;
+            --font-body: 'DM Sans', -apple-system, sans-serif;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: var(--font-body);
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+        }
+
+        /* ── Header ── */
+        .header {
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            padding: 20px 40px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        .header-logo { height: 52px; width: auto; }
+        .header-divider { width: 1px; height: 40px; background: var(--border); }
+        .header-text h1 {
+            font-family: var(--font-display);
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--text);
+            letter-spacing: -0.3px;
+        }
+        .header-desc {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+        .header-updated {
+            margin-left: auto;
+            font-size: 11px;
+            color: var(--text-muted);
+            text-align: right;
+        }
+
+        /* ── Container ── */
+        .container {
+            max-width: 1280px;
+            margin: 0 auto;
+            padding: 28px 40px 48px;
+        }
+
+        /* ── Section labels ── */
+        .section-label {
+            font-family: var(--font-display);
+            font-size: 17px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 16px;
+        }
+
+        /* ── KPI row ── */
+        .kpi-row {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+        .kpi {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 20px 22px;
+        }
+        .kpi-label {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 6px;
+        }
+        .kpi-value {
+            font-family: var(--font-display);
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--text);
+            line-height: 1.1;
+        }
+        .kpi-unit {
+            font-family: var(--font-body);
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-left: 3px;
+        }
+        .kpi-sub {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }
+
+        /* ── Inspection progress section ── */
+        .inspection-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+        .inspection-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 24px 26px;
+            display: flex;
+            align-items: center;
+            gap: 24px;
+        }
+        .inspection-ring {
+            position: relative;
+            width: 96px;
+            height: 96px;
+            flex-shrink: 0;
+        }
+        .inspection-ring svg { transform: rotate(-90deg); }
+        .inspection-ring-bg {
+            fill: none;
+            stroke: var(--bg-muted);
+            stroke-width: 7;
+        }
+        .inspection-ring-fill {
+            fill: none;
+            stroke: var(--green);
+            stroke-width: 7;
+            stroke-linecap: round;
+            transition: stroke-dashoffset 1s ease;
+        }
+        .inspection-ring-pct {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: var(--font-display);
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--text);
+        }
+        .inspection-details { flex: 1; }
+        .inspection-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 10px;
+        }
+        .inspection-stats { display: flex; flex-direction: column; gap: 6px; }
+        .inspection-stat {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+        .inspection-stat-val {
+            font-weight: 600;
+            color: var(--text);
+        }
+
+        /* breakdown bars */
+        .insp-breakdown {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            flex: 1;
+        }
+        .insp-bar-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .insp-bar-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            width: 80px;
+            flex-shrink: 0;
+            text-align: right;
+        }
+        .insp-bar-track {
+            flex: 1;
+            height: 10px;
+            background: var(--bg-muted);
+            border-radius: 5px;
+            overflow: hidden;
+        }
+        .insp-bar-fill {
+            height: 100%;
+            border-radius: 5px;
+            background: var(--green);
+            transition: width 0.8s ease;
+        }
+        .insp-bar-pct {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text);
+            width: 42px;
+            flex-shrink: 0;
+        }
+
+        /* ── Charts row ── */
+        .charts-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 28px;
+        }
+        .chart-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 22px 24px;
+            display: flex;
+            flex-direction: column;
+        }
+        .chart-card-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 16px;
+        }
+        .chart-wrap {
+            flex: 1;
+            min-height: 210px;
+            position: relative;
+        }
+        .chart-wrap canvas { width: 100% !important; height: 100% !important; }
+
+        /* ── Condition summary ── */
+        .condition-row {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 28px;
+        }
+        .condition-pill {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 18px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+        .condition-pill.good { background: var(--green-bg); border-color: rgba(58,138,92,0.15); }
+        .condition-pill.fair { background: var(--amber-bg); border-color: rgba(196,134,11,0.15); }
+        .condition-pill.poor { background: var(--red-bg); border-color: rgba(192,57,43,0.15); }
+        .condition-pill .pill-dot {
+            width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+        }
+        .condition-pill.good .pill-dot { background: var(--green); }
+        .condition-pill.fair .pill-dot { background: var(--amber); }
+        .condition-pill.poor .pill-dot { background: var(--red); }
+        .condition-pill .pill-label { font-size: 13px; color: var(--text-secondary); }
+        .condition-pill .pill-value {
+            margin-left: auto;
+            font-family: var(--font-display);
+            font-size: 22px;
+            font-weight: 700;
+        }
+        .condition-pill.good .pill-value { color: var(--green); }
+        .condition-pill.fair .pill-value { color: var(--amber); }
+        .condition-pill.poor .pill-value { color: var(--red); }
+        .condition-pill .pill-pct {
+            font-family: var(--font-body);
+            font-size: 12px;
+            font-weight: 400;
+            color: var(--text-muted);
+            margin-left: 2px;
+        }
+
+        /* ── Map section ── */
+        .map-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .map-header {
+            display: flex;
+            align-items: center;
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border);
+            gap: 16px;
+        }
+        .map-header-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+        }
+        .map-search-bar {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            background: var(--bg-muted);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            overflow: hidden;
+            width: 320px;
+            transition: border-color 0.2s;
+            position: relative;
+        }
+        .map-search-bar:focus-within { border-color: var(--accent-light); }
+        .map-search-icon { padding: 0 10px; color: var(--text-muted); font-size: 13px; }
+        .map-search-input {
+            flex: 1; background: transparent; border: none; outline: none;
+            font-family: var(--font-body); font-size: 13px; color: var(--text);
+            padding: 9px 0;
+        }
+        .map-search-input::placeholder { color: var(--text-muted); }
+        .map-search-clear {
+            padding: 0 10px; background: none; border: none;
+            color: var(--text-muted); cursor: pointer; font-size: 15px;
+            display: none;
+        }
+        .map-search-clear.visible { display: block; }
+
+        .map-search-results {
+            position: absolute;
+            top: 100%;
+            left: 0; right: 0;
+            margin-top: 4px;
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            max-height: 340px;
+            overflow-y: auto;
+            display: none;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+            z-index: 20;
+        }
+        .map-search-results.visible { display: block; }
+        .sr-group {
+            padding: 8px 14px 4px;
+            font-size: 10px; font-weight: 600;
+            color: var(--text-muted); text-transform: uppercase;
+            letter-spacing: 1.2px;
+            border-bottom: 1px solid var(--border);
+            background: var(--bg-muted);
+            display: flex; align-items: center; gap: 6px;
+            position: sticky; top: 0;
+        }
+        .sr-group-dot { width: 6px; height: 6px; border-radius: 50%; }
+        .sr-group-count { margin-left: auto; font-weight: 700; font-size: 11px; color: var(--text-secondary); }
+        .sr-item {
+            padding: 9px 14px; cursor: pointer;
+            border-bottom: 1px solid var(--bg-muted);
+            transition: background 0.1s;
+        }
+        .sr-item:hover { background: var(--accent-wash); }
+        .sr-item:last-child { border-bottom: none; }
+        .sr-title { font-size: 13px; font-weight: 600; color: var(--text); }
+        .sr-detail { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+        .sr-detail em { font-style: normal; color: var(--accent-light); font-weight: 600; }
+        .sr-empty { padding: 16px; text-align: center; font-size: 12px; color: var(--text-muted); }
+
+        #mapView { width: 100%; height: 480px; }
+
+        .map-legend-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            padding: 12px 24px;
+            border-top: 1px solid var(--border);
+            background: var(--bg-muted);
+        }
+        .legend-group {
+            display: flex; align-items: center; gap: 10px;
+            font-size: 11px; color: var(--text-secondary);
+        }
+        .legend-group-label { font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-right: 2px; }
+        .lg-swatch { width: 14px; height: 3px; border-radius: 1px; }
+        .lg-dot { width: 7px; height: 7px; border-radius: 50%; }
+        .lg-dash { width: 14px; height: 2px; background: repeating-linear-gradient(90deg, currentColor 0 4px, transparent 4px 7px); }
+
+        /* ── Footer ── */
+        .footer {
+            padding: 20px 40px;
+            text-align: center;
+            font-size: 11px;
+            color: var(--text-muted);
+            border-top: 1px solid var(--border);
+            margin-top: 16px;
+        }
+
+        /* ── Loading ── */
+        .loading {
+            position: fixed; inset: 0; background: var(--bg);
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            z-index: 1000; transition: opacity 0.4s;
+        }
+        .loading.hidden { opacity: 0; pointer-events: none; }
+        .loading-spinner {
+            width: 32px; height: 32px;
+            border: 3px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+        .loading-text { margin-top: 12px; font-size: 12px; color: var(--text-muted); }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @media (max-width: 900px) {
+            .kpi-row { grid-template-columns: repeat(2, 1fr); }
+            .charts-row { grid-template-columns: 1fr; }
+            .condition-row { grid-template-columns: 1fr; }
+            .inspection-row { grid-template-columns: 1fr; }
+            .container { padding: 20px; }
+            .header { padding: 16px 20px; }
+            .map-search-bar { width: 240px; }
+        }
+        @media (max-width: 580px) {
+            .kpi-row { grid-template-columns: 1fr; }
+            .map-header { flex-direction: column; align-items: stretch; }
+            .map-search-bar { width: 100%; margin-left: 0; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="loading" id="loading">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">Loading infrastructure data</div>
+</div>
+
+<header class="header">
+    <img class="header-logo" alt="City of Fair Oaks Ranch" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZlcnNpb249IjEuMSIgdmlld0JveD0iMCAwIDk1NC41OTA0MzYgODYxLjg4MDE4MiI+CiAgPGRlZnM+CiAgICA8c3R5bGU+CiAgICAgIC5zdDAgewogICAgICAgIGZpbGw6ICNmZmY7CiAgICAgIH0KCiAgICAgIC5zdDEgewogICAgICAgIGZpbGw6ICMxOTI3Mzc7CiAgICAgIH0KCiAgICAgIC5zdDIgewogICAgICAgIGZpbGw6ICM4ZDk1NmM7CiAgICAgIH0KICAgIDwvc3R5bGU+CiAgPC9kZWZzPgogIDxnPgogICAgPHBhdGggY2xhc3M9InN0MCIgZD0iTTk1NC41OTAyMDEsMTc0LjIzOTk5aC0xNzUuODg5OTU0YzU1LjE3OTk5Myw3NC4xOTAwMDIsODUuMzE5OTQ2LDE2NC44MjAwMDcsODUuMzE5OTQ2LDI1Ny43NjAwMSwwLDExNS4zOTAwMTUtNDQuOTI5OTkzLDIyMy44OTAwMTUtMTI2LjUyOTk2OCwzMDUuNDcwMDMyLTgxLjYwMDAzNyw4MS41OTk5NzYtMTkwLjEwMDAzNywxMjYuNTI5OTY4LTMwNS40ODk5OSwxMjYuNTI5OTY4cy0yMjMuODY5OTk1LTQ0LjkyOTk5My0zMDUuNDcwMDMyLTEyNi41Mjk5NjhDNDQuOTMwMjI4LDY1NS44OTAwMTUuMDAwMjM1LDU0Ny4zOTAwMTUuMDAwMjM1LDQzMlM0NC45MzAyMjgsMjA4LjEwOTk4NSwxMjYuNTMwMjAzLDEyNi41MzAwMjlDMjA4LjEzMDI0LDQ0LjkyOTk5MywzMTYuNjEwMjIsMCw0MzIuMDAwMjM1LDBoNTIyLjU4OTk2NnYxNzQuMjM5OTlaIi8+CiAgICA8cGF0aCBjbGFzcz0ic3QyIiBkPSJNOTU0LjU5MDIwMSwwSDQzMi4wMDAyMzVjLTExNS4zOTAwMTUsMC0yMjMuODY5OTk1LDQ0LjkyOTk5My0zMDUuNDcwMDMyLDEyNi41MzAwMjlDNDQuOTMwMjI4LDIwOC4xMDk5ODUuMDAwMjM1LDMxNi42MDk5ODUuMDAwMjM1LDQzMnM0NC45Mjk5OTMsMjIzLjg5MDAxNSwxMjYuNTI5OTY4LDMwNS40NzAwMzJjODEuNjAwMDM3LDgxLjU5OTk3NiwxOTAuMDgwMDE3LDEyNi41Mjk5NjgsMzA1LjQ3MDAzMiwxMjYuNTI5OTY4czIyMy44ODk5NTQtNDQuOTI5OTkzLDMwNS40ODk5OS0xMjYuNTI5OTY4YzgxLjU5OTk3Ni04MS41ODAwMTcsMTI2LjUyOTk2OC0xOTAuMDgwMDE3LDEyNi41Mjk5NjgtMzA1LjQ3MDAzMiwwLTkyLjk0MDAwMi0zMC4xMzk5NTQtMTgzLjU3MDAwNy04NS4zMTk5NDYtMjU3Ljc2MDAxaDE3NS44ODk5NTRWMFpNOTMxLjQ1MDI0NywxNTEuMTAwMDM3aC0yMDEuMzUwMDM3bDE1Ljg1OTk4NSwxOC45ODk5OWM2MS4yMDAwMTIsNzMuMjY5OTU4LDk0LjkyMDA0NCwxNjYuMjc5OTY4LDk0LjkyMDA0NCwyNjEuOTA5OTczLDAsMjI1LjQ1MDAxMi0xODMuNDI5OTkzLDQwOC44NTk5ODUtNDA4Ljg4MDAwNSw0MDguODU5OTg1UzIzLjE0MDE4OSw2NTcuNDUwMDEyLDIzLjE0MDE4OSw0MzIsMjA2LjU1MDIyMywyMy4xNDAwMTUsNDMyLjAwMDIzNSwyMy4xNDAwMTVoNDk5LjQ1MDAxMnYxMjcuOTYwMDIyWiIvPgogICAgPHBhdGggY2xhc3M9InN0MSIgZD0iTTY0Mi4xMDc4NTUsNTM5LjUzNzIzMmMtMTguNTcwMzE2LDI4LjMyMDU4OC0zNC42ODM3MTEsMjAuMDQ2MDctNjQuNjAwNjk4LDE2LjMyMzY4OS4xMzE1NDYsNy4wOTY0MzYsMy44MDQzMjIsMTMuMjE4Mzg3LDQuNjYzNzE2LDE3LjMzODUwMywyLjA1OTU3MSw4LjEzMTYxNi03LjAxNjEzLDE1Ljc5ODE4NS0xNS43OTAyMTEsMTYuMTA5MzY1LTkuMTAwNzkyLDEuNjY4NzQzLTIxLjY4ODI4LTEwLjAyMjc2Ny0yOC4xMjUxNzQtNS4zMzk3OCw2LjE2MjExOSwxMi43OTA0MzYsMTcuMDI2MDUsMjQuMjQ4OTg0LDYuNjkzNjc4LDQwLjE5NTQ2OC0xMS4xMzU5NzgsOS40NTc5MjUtMjYuNTM4ODg1LS4wMTY2MjctMzguMTMwNDc0LTIuMTU0Mzg2LTE0LjAzMjQzNS0uOTc5NjM3LTQzLjUwOTU4MSwxMS4wMjU3NzgtNDYuODg3OTg4LTEwLjIzNzU2My0xLjE0MjU0NC0xMC42NzAzMTIsMi40NTIyMy0yNC4yOTUwODYuODg4NDM1LTI5LjI5ODcxNy0uMjc3MjY3LTIuNjc1Njk4LTIuMjE4MzQxLTEzLjUzMTE5Mi03LjI2MTQ4OS0xMi45NDE5MTUtMTAuMjQwMjg4LDUuMDEyMzA1LDIuMjY4Nzc2LDE4LjY3ODExMS0zLjkzMzIwMSwyNS43NzYxOTktMy4zNTYxMTYsMTEuOTI2NjE5LTIzLjU4NzE1OCwxMS41NTYwNDMtMzEuODEyODYyLDQuMjczNTE3LTEwLjU1MTE1MS05Ljk3NjEyLTQuODk3MDI0LTQwLjA1MDM5Ny0xNi45ODEwMzctMjYuODA5Mzc0LTMuMDg0OTEsNC43Njk0NDItMy4wNTg4NDcsMTAuOTI3ODcyLTUuNTcyNjU3LDE1LjIzNzU0Mi00LjU2Mzg1OCwxMC4zNTA3NjctMTYuMDQ1Nzg5LDcuODcyNDA1LTIwLjg4MDU0MywzLjIyMTMwNS0yMC45NjI1NzEtMjguNzk4MzA2LTI1LjU4NjQxNi0zMy4yMzg0NDgtNDUuOTQ0MjA5LTU1Ljg0MTk0My0xNi44NzI4MzYtMTIuMDcxODk3LTQxLjU4ODcwOC02Ljg5NTIxNi02MS40MTQ0MTktMTAuMDIzODE1LTEyLjIxNDgyLTIuMjE5Nzg3LTIxLjQxODg0Nyw4LjMzNjM3My0yNS44NjQ1OC05LjYxMTI3MS0xLjQyNDc2LTIuODg1MjI3LjEwMTU0OS03Ljc3OTExLDQuNTAzNDg3LTcuNzYwMDg0LDQuMDE4MTQyLS4xNzc4MDksMjAuOTU3MzU2LS4wNjAwOTUsMjMuMzcyMjIyLS4xOTYzNDQsNS4wNTk3MiwzLjgzNjA5NCw5LjQ4Nzg1My4zMzcxMTIsMTUuODk2NTE1LjY1OTA0NSwyMC45MzIwOTktMi42MjY5MiwyMC4yNDM4ODQsMi4yMzA1NDQsNDAuNDQ0NTAxLTMuNTA2MzYxLDE2Ljk0NTgyNi01Ljk2NDA5MywzNC43NDE1NDMtMjMuNDQwMjg1LDQyLjg4MTkxMS00MC45OTc3MTcsNC45MTY0NC05LjExNzQxMSwyMS4xMjMwNzctMjAuMTIxOTI2LDMxLjU0NTU2OC05LjM0NDY4My0uMDAwNjkzLS4wMDAzMzksMTAuNjQ0NDAyLDE0LjA5ODE5NywxMC42NDQ0MDIsMTQuMDk4MTk3LDYuMzU2NjA2LTQuNzc2NTk1LS40NTk0NjMtMTQuODUwNzMyLDUuMTYyMDQtMjIuMzQwNTY0LDcuODY3NDI5LTUuNTY0MTY1LDE4LjQwMDEyNC0xLjQ1Nzk2MywyMi45MTAyODksMi40NTYxMDMsNC4wNjMzNTEsMi4yMTc1MzksNy4xODY5MjMtLjM0OTU4MSwxMS4yNjgyMDEtMS40MDYyMzksMTMuMTgwMjU5LTIuMDcxMjE1LDguMTAwOTg4LDkuODYwMjAxLDEwLjI4OTI4MSwyNC40NTkzNywxMC43Mjg4NzQtNS43NjQ5NTMtNS45ODEzODQtNDUuOTA2MTQ0LDIzLjM3NDI3My0zOS41NTI5NjcsMzAuNTA1MzAxLDYuOTc5MDMyLDU4LjkxOTgwOS0yNC4zMDcwMjksNzEuMzk5NTA2LTMuOTczNDA5LDMuNDg2MTY2LDEwLjExMDAwOC41ODExMTksMTAuMjI5NTkyLTMuMzQ2MTIxLDIwLjUyNzE0MS0xLjMwMDA3MSwzLjQxNzg5My0xLjY3MzkzNSw1LjAzNzc1Ni0zLjQ1NDA1Nyw2LjI4Mzg2My0yLjQ4MjEzOSwxLjI5MDMyOS0xMy42ODczOTEsNS42NDI0Ny03LjQ0MDY1NSwxMC40MTM5NSwxMy42MzU0MzEsMTQuMzc1MDgzLDI1LjA5MTI2OC0zLjkyNjI1MywzNy40ODkyNTMtLjYyMzk2OSwxMC42MTk5NTUsMy42MDUxMDEsMTMuMjAwMTU0LDkuNDEzMjQ4LDE0Ljc5MzY2MywxNi42OTc0OTkuNDAyNjA2LDguODE1OTkxLTYuMzA2NjUxLDE0LjEyMjQyOC0xMC4xMjk4ODIsMjIuNjQzODQ0LDEzLjE4NzEwNyw3Ljc4NzkwMywyOC4wNzAwNzItMS43OTEyNzQsNDAuNDI2NjcxLTEuMDMwOTY5LDIwLjY2ODk3LDEuNDk3MDkzLDI1Ljc4NjM3MywyNS44NTc0NzEsMTguOTIyNjQ1LDM2LjI3NzQ3MloiLz4KICAgIDxwYXRoIGNsYXNzPSJzdDEiIGQ9Ik0xOTIuOTkwMjI1LDMzOS41ODAwMTdjLTMuNjA5OTg1LTQuMDIwMDItOC4yMjAwMzItNi4wMzAwMjktMTMuODA5OTk4LTYuMDMwMDI5LTUuNzAwMDEyLDAtMTAuMzY5OTk1LDIuMDEwMDEtMTQuMDIwMDIsNi4wMzAwMjktMy42NDk5NjMsNC4wMjk5NjgtNS40Njk5NzEsOS42NTAwMjQtNS40Njk5NzEsMTYuODY5OTk1LDAsNy4xOTAwMDIsMS44MjAwMDcsMTIuNzk5OTg4LDUuNDQ5OTUxLDE2Ljg0MDAyNywzLjY0MDAxNSw0LjAyOTk2OCw4LjI3MDAyLDYuMDQ5OTg4LDEzLjg5MDAxNSw2LjA0OTk4OCw1LjY3MDA0NCwwLDEwLjMwOTk5OC0yLjAxMDAxLDEzLjk0MDAwMi02LjAzMDAyOSwzLjYxOTk5NS00LjAyOTk2OCw1LjQyOTk5My05LjY0OTk2Myw1LjQyOTk5My0xNi44NTk5ODUsMC03LjIxOTk3MS0xLjc5OTk4OC0xMi44NDAwMjctNS40MDk5NzMtMTYuODY5OTk1Wk04NS45NjAxOTYsNDk2LjIzOTk5bDQuMDUwMDQ5LDE5LjA3MDAwNywyMy42NDk5NjMtMTUuMjI5OTgtMjcuNzAwMDEyLTMuODQwMDI3Wk0xMzguODQwMjAxLDU3MS42OTAwMDJsLTcuNTI5OTY4LTE2LjI1LTE3LjY3OTk5Myw4LjE5MDAwMiw3LjAzOTk3OCwxNS4yMDAwMTJjMS45NjAwMjIsNC4yMjk5OCw0LjA0OTk4OCw2Ljk4OTk5LDYuMjcwMDIsOC4yNzk5NjgsMi4yMDk5NjEsMS4yOTAwMzksNC45NTk5NjEsMS4xODAwNTQsOC4yMjk5OC0uMzM5OTY2LDUuODQ5OTc2LTIuNzEwMDIyLDcuMDcwMDA3LTcuNzM5OTksMy42Njk5ODMtMTUuMDgwMDE3Wk0xNzcuNDgwMjE2LDYzMi42MDk5ODVjLTMuNTEwMDEtNC40ODk5OS03Ljk2OTk3MS02LjkyOTk5My0xMy4zOTAwMTUtNy4zMTk5NDYtNS40MDk5NzMtLjQwMDAyNC0xMC45NTk5NjEsMS42Mjk5NDQtMTYuNjQ5OTYzLDYuMDc5OTU2LTUuNjYwMDM0LDQuNDI5OTkzLTguOTYwMDIyLDkuMzIwMDA3LTkuOTAwMDI0LDE0LjY3MDA0NC0uOTQwMDAyLDUuMzQ5OTc2LjMzMDAxNywxMC4yMzk5OSwzLjc4OTk3OCwxNC42Njk5ODMsMy41LDQuNDU5OTYxLDcuOTQwMDAyLDYuODgwMDA1LDEzLjM0MDAyNyw3LjI2MDAxLDUuNDAwMDI0LjM2OTk5NSwxMC45NTAwMTItMS42NzAwNDQsMTYuNjMwMDA1LTYuMTE5OTk1LDUuNjkwMDAyLTQuNDUwMDEyLDktOS4zMzAwMTcsOS45NDAwMDItMTQuNjUwMDI0cy0uMzA5OTk4LTEwLjE5MDAwMi0zLjc2MDAxLTE0LjU5MDAyN1pNMTg3LjA3MDI0Miw2ODUuNDEwMDM0bDE0LjMyOTk1NiwxMy4yMDk5NjEsMTAuNDg5OTktMjYuMDk5OTc2LTI0LjgxOTk0NiwxMi44OTAwMTVaTTM2NC45NjAxOTYsNzUxLjM1MDAzN2wtMTcuNDY5OTcxLTMuOTMwMDU0LTQuMjcwMDIsMTkuMDIwMDIsMTYuMzQwMDI3LDMuNjY5OTgzYzQuNTQ5OTg4LDEuMDIwMDIsOC4wMTAwMSwxLjA1MDA0OSwxMC4zOTAwMTUuMDcwMDA3LDIuMzY5OTk1LS45Njk5NzEsMy45NDk5NTEtMy4yMTk5NzEsNC43Mzk5OS02LjczOTk5LDEuNDA5OTczLTYuMjg5OTc4LTEuODMwMDE3LTEwLjMyMDAwNy05LjczMDA0Mi0xMi4wODk5NjZaTTQxMi4wMDAyMzUsNzU4Ljc2MDAxbC0xMS4wNzAwMDcsMjUuNjc5OTkzLDE5LjQ1OTk2MSwxLjE2OTk4My04LjM4OTk1NC0yNi44NDk5NzZaTTc0OC4yOTAyMTMsNTA5LjIxMDAyMmwyMy4zNjk5OTUsMTUuMzQ5OTc2LDQuNTIwMDItMTguOTU5OTYxLTI3Ljg5MDAxNSwzLjYwOTk4NVpNNDAwLjkzMDIyOCw3ODQuNDQwMDAybDE5LjQ1OTk2MSwxLjE2OTk4My04LjM4OTk1NC0yNi44NDk5NzYtMTEuMDcwMDA3LDI1LjY3OTk5M1pNMjAxLjQwMDE5OCw2OTguNjE5OTk1bDEwLjQ4OTk5LTI2LjA5OTk3Ni0yNC44MTk5NDYsMTIuODkwMDE1LDE0LjMyOTk1NiwxMy4yMDk5NjFaTTE3OS4wMzAyMDMsMzc5LjM0MDAyN2M1LjY3MDA0NCwwLDEwLjMwOTk5OC0yLjAxMDAxLDEzLjk0MDAwMi02LjAzMDAyOSwzLjYxOTk5NS00LjAyOTk2OCw1LjQyOTk5My05LjY0OTk2Myw1LjQyOTk5My0xNi44NTk5ODUsMC03LjIxOTk3MS0xLjc5OTk4OC0xMi44NDAwMjctNS40MDk5NzMtMTYuODY5OTk1LTMuNjA5OTg1LTQuMDIwMDItOC4yMjAwMzItNi4wMzAwMjktMTMuODA5OTk4LTYuMDMwMDI5LTUuNzAwMDEyLDAtMTAuMzY5OTk1LDIuMDEwMDEtMTQuMDIwMDIsNi4wMzAwMjktMy42NDk5NjMsNC4wMjk5NjgtNS40Njk5NzEsOS42NTAwMjQtNS40Njk5NzEsMTYuODY5OTk1LDAsNy4xOTAwMDIsMS44MjAwMDcsMTIuNzk5OTg4LDUuNDQ5OTUxLDE2Ljg0MDAyNywzLjY0MDAxNSw0LjAyOTk2OCw4LjI3MDAyLDYuMDQ5OTg4LDEzLjg5MDAxNSw2LjA0OTk4OFpNMTY0LjA5MDIwMSw2MjUuMjkwMDM5Yy01LjQwOTk3My0uNDAwMDI0LTEwLjk1OTk2MSwxLjYyOTk0NC0xNi42NDk5NjMsNi4wNzk5NTYtNS42NjAwMzQsNC40Mjk5OTMtOC45NjAwMjIsOS4zMjAwMDctOS45MDAwMjQsMTQuNjcwMDQ0LS45NDAwMDIsNS4zNDk5NzYuMzMwMDE3LDEwLjIzOTk5LDMuNzg5OTc4LDE0LjY2OTk4MywzLjUsNC40NTk5NjEsNy45NDAwMDIsNi44ODAwMDUsMTMuMzQwMDI3LDcuMjYwMDEsNS40MDAwMjQuMzY5OTk1LDEwLjk1MDAxMi0xLjY3MDA0NCwxNi42MzAwMDUtNi4xMTk5OTUsNS42OTAwMDItNC40NTAwMTIsOS05LjMzMDAxNyw5Ljk0MDAwMi0xNC42NTAwMjRzLS4zMDk5OTgtMTAuMTkwMDAyLTMuNzYwMDEtMTQuNTkwMDI3Yy0zLjUxMDAxLTQuNDg5OTktNy45Njk5NzEtNi45Mjk5OTMtMTMuMzkwMDE1LTcuMzE5OTQ2WiIvPgogIDwvZz4KICA8cGF0aCBjbGFzcz0ic3QxIiBkPSJNOTMxLjQ1MDI0NywyMy4xNDAwMTVoLTQ5OS40NTAwMTJDMjA2LjU1MDIyMywyMy4xNDAwMTUsMjMuMTQwMTg5LDIwNi41NDk5ODgsMjMuMTQwMTg5LDQzMnMxODMuNDEwMDM0LDQwOC44NTk5ODUsNDA4Ljg2MDA0Niw0MDguODU5OTg1LDQwOC44ODAwMDUtMTgzLjQwOTk3Myw0MDguODgwMDA1LTQwOC44NTk5ODVjMC05NS42MzAwMDUtMzMuNzIwMDMyLTE4OC42NDAwMTUtOTQuOTIwMDQ0LTI2MS45MDk5NzNsLTE1Ljg1OTk4NS0xOC45ODk5OWgyMDEuMzUwMDM3VjIzLjE0MDAxNVpNNDgxLjU4MDE5MSw1Ni40NTAwMTJsMTIuMDEwMDEsMjguNzEwMDIyLDIxLjI1LTIyLjY3OTk5Myw4Ljk4MDA0MiwxLjYyOTk0NC0yNy43NjAwMSwyOC4xODAwNTQtNC4yODAwMjksMjMuNjI5OTQ0LTcuMzkwMDE1LTEuMzM5OTY2LDQuMjkwMDM5LTIzLjYzMDAwNS0xNi4wODAwMTctMzYuMTMwMDA1LDguOTc5OTgsMS42MzAwMDVaTTQyMS4zMDAyMjMsNTNsNDQuODgwMDA1LDEuNDEwMDM0LS4yMTAwMjIsNi43Mjk5OC0xOC43NS0uNTkwMDI3LTEuNTcwMDA3LDQ5Ljk0MDAwMi03LjUzOTk3OC0uMjM5OTksMS41NzAwMDctNDkuOTQwMDAyLTE4LjU5MDAyNy0uNTg5OTY2LjIxMDAyMi02LjcyMDAzMlpNNDA5LjQ3MDIwNiw1NC4xNzk5OTNsNC4wMTAwMSw1Ni41NTAwNDktNy41MjAwMi41Mzk5NzgtNC4wMDk5NDktNTYuNTQ5OTg4LDcuNTE5OTU4LS41NDAwMzlaTTM0Ny4wNzAyNDIsNzAuMDU5OTk4YzMuNzE5OTcxLTYuMDcwMDA3LDkuNTE5OTU4LTkuODQ5OTc2LDE3LjM5OTk2My0xMS4zMzk5NjYsNi4wNTk5OTgtMS4xNDAwMTUsMTEuNTIwMDItLjQ4MDA0MiwxNi4zOTAwMTUsMS45Nzk5OCw0Ljg4MDAwNSwyLjQ2OTk3MSw4LjA5MDAyNyw2LjMyMDAwNyw5LjYzMDAwNSwxMS41NzAwMDdsLTcuNjAwMDM3LDEuNDI5OTkzYy0uOTY5OTcxLTMuNDYwMDIyLTMuMDI5OTY4LTUuOTY5OTcxLTYuMTY5OTgzLTcuNTMwMDI5LTMuMTQwMDE1LTEuNTU5OTk4LTYuNzk5OTg4LTEuOTM5OTQxLTEwLjk3OTk4LTEuMTQ5OTYzLTUuNjUwMDI0LDEuMDU5OTk4LTkuNzUsMy44NDk5NzYtMTIuMzA5OTk4LDguMzY5OTk1LTIuNTU5OTk4LDQuNTEwMDEtMy4xNjAwMzQsMTAuMzY5OTk1LTEuNzkwMDM5LDE3LjU5MDAyNywxLjM2MDA0Niw3LjE5OTk1MSw0LjA0MDAzOSwxMi40Mzk5NDEsOC4wNDAwMzksMTUuNzE5OTcxLDQuMDEwMDEsMy4yODAwMjksOC44MDk5OTgsNC40MDAwMjQsMTQuNDA5OTczLDMuMzQwMDI3LDQuMzYwMDQ2LS44MzAwMTcsNy42Nzk5OTMtMi41NTk5OTgsOS45NjAwMjItNS4xOTAwMDIsMi4yNzk5NjgtMi42NDAwMTUsMy4yMjk5OC01Ljk2MDAyMiwyLjgzOTk2Ni05Ljk4MDA0Mmw3LjYwMDAzNy0xLjQ0MDAwMmMuNTgwMDE3LDYuMDMwMDI5LS44ODAwMDUsMTEuMDU5OTk4LTQuNDAwMDI0LDE1LjA4MDAxNy0zLjUxMDAxLDQuMDIwMDItOC40MTk5ODMsNi42MzAwMDUtMTQuNzI5OTgsNy44MjAwMDctNy44ODAwMDUsMS40ODk5OS0xNC42NTk5NzMuMDg5OTY2LTIwLjM0MDAyNy00LjIxMDAyMi01LjY3OTk5My00LjI4OTk3OC05LjM0OTk3Ni0xMC44NDk5NzYtMTEuMDE5OTU4LTE5LjcwMDAxMi0xLjY3MDA0NC04LjgzOTk2Ni0uNjUwMDI0LTE2LjI4OTk3OCwzLjA3MDAwNy0yMi4zNTk5ODVaTTIxNi4xNDAxODksMzI4LjEwMDAzN2gzOC4yNXY2LjcyOTk4aC0zMC43NXYxNy41NDk5ODhoMjYuNjUwMDI0djYuNzI5OThoLTI2LjY1MDAyNHYyNS42ODAwNTRoLTcuNXYtNTYuNjkwMDAyWk0xNTkuNTQwMjEzLDMzNS4xNzk5OTNjNS4wNzAwMDctNS4zNjk5OTUsMTEuNTk5OTc2LTguMDQ5OTg4LDE5LjU1OTk5OC04LjA0OTk4OCw3Ljk0MDAwMiwwLDE0LjQ0MDAwMiwyLjY3OTk5MywxOS40ODk5OSw4LjA0OTk4OCw1LjA1OTk5OCw1LjM2MDA0Niw3LjU4MDAxNywxMi40NTAwMTIsNy41ODAwMTcsMjEuMjcwMDIsMCw4LjgwOTk5OC0yLjUyMDAyLDE1LjkwMDAyNC03LjU4MDAxNywyMS4yNjAwMS01LjA0OTk4OCw1LjM2OTk5NS0xMS41NDk5ODgsOC4wNDk5ODgtMTkuNDg5OTksOC4wNDk5ODgtNy45NjAwMjIsMC0xNC40ODk5OS0yLjY5MDAwMi0xOS41NTk5OTgtOC4wNTk5OTgtNS4wODAwMTctNS4zODAwMDUtNy42MTk5OTUtMTIuNDYwMDIyLTcuNjE5OTk1LTIxLjI1LDAtOC44MjAwMDcsMi41Mzk5NzgtMTUuOTA5OTczLDcuNjE5OTk1LTIxLjI3MDAyWk01Ni45MTAyMDgsNDM5LjA0OTk4OGw1Ni41ODAwMTctMy40ODk5OSwyLjM1OTk4NSwzOC4xNzk5OTMtNi43MTk5NzEuNDEwMDM0LTEuODkwMDE1LTMwLjY5MDAwMi0xNy41MjAwMiwxLjA4MDAxNywxLjYzMDAwNSwyNi41OTk5NzYtNi43MTAwMjIuNDA5OTczLTEuNjM5OTU0LTI2LjU4OTk2Ni0yNS42MzAwMDUsMS41ODAwMTctLjQ2MDAyMi03LjQ5MDA1MVpNNjkuMTQwMTg5LDUyOC43MjAwMzJsMTUuNTEwMDEtMTAuMDIwMDItNC45NDAwMDItMjMuMjE5OTcxLTE4LjE2OTk4My0yLjU1MDA0OS0xLjY1MDAyNC03Ljc1LDU5Ljk4MDA0Miw5LjUxMDAxLDEuNjc5OTkzLDcuOTAwMDI0LTUwLjY1MDAyNCwzNC40MDk5NzMtMS43NjAwMS04LjI3OTk2OFpNNzQuODEwMjMzLDU0Ni42NjAwMzRsNTMuODI5OTU2LTE3Ljc3MDAyLDIuMzcwMDU2LDcuMTU5OTczLTUzLjg0MDAyNywxNy43NzAwMi0yLjM1OTk4NS03LjE1OTk3M1pNMTE5LjUwMDIzNSw1ODguNTMwMDI5bC0uMTQwMDE1LjA3MDAwN2MuNTEwMDEsNC4xMDk5ODUtMS4zMzAwMTcsOC4yNjk5NTgtNS41MTAwMSwxMi40Nzk5OGwtMTEuNjE5OTk1LDExLjY1MDAyNC0zLjQwOTk3My03LjM3MDA1NiwxMS40Nzk5OC0xMS4xOTk5NTFjMi4wMjk5NjgtMS45OTAwNTEsMy4zNDk5NzYtNC4zNTAwMzcsMy45NjAwMjItNy4wODAwMTcuNjA5OTg1LTIuNzI5OTguMzA5OTk4LTUuNDAwMDI0LS45MDAwMjQtOC4wMjAwMmwtNS44NDAwMjctMTIuNTk5OTc2LTIyLDEwLjIwMDAxMi0zLjE0OTk2My02LjgwOTk5OCw1MS40NDAwMDItMjMuODMwMDE3LDEwLjU0OTk4OCwyMi43NzAwMmMxLjg0MDAyNywzLjk3OTk4LDIuOTYwMDIyLDcuNDA5OTczLDMuMzU5OTg1LDEwLjI4OTk3OC40MDAwMjQsMi44ODAwMDUtLjI2OTk1OCw1LjcwMDAxMi0yLjAxMDAxLDguNDQwMDAyLTEuNzUsMi43Mzk5OS00LjE2OTk4Myw0LjgzMDAxNy03LjI4OTk3OCw2LjI3MDAyLTMuNTQ5OTg4LDEuNjQ5OTYzLTcsMS45ODk5OS0xMC4zNDAwMjcsMS4wMzk5NzgtMy4zMzk5NjYtLjk1MDAxMi02LjE5OTk1MS0zLjA0OTk4OC04LjU3OTk1Ni02LjI5OTk4OFpNMTU0LjY3MDIxOCw2NzUuMTA5OTg1Yy03LjM0MDAyNy0uNjY5OTgzLTEzLjQ1MDAxMi00LjEyOTk0NC0xOC4zNDk5NzYtMTAuMzg5OTU0LTQuOTEwMDM0LTYuMjcwMDItNi44MDk5OTgtMTMuMDU5OTk4LTUuNzEwMDIyLTIwLjM4MDAwNSwxLjEwOTk4NS03LjMwOTk5OCw1LjExOTk5NS0xMy42NzAwNDQsMTIuMDM5OTc4LTE5LjA5MDAyNyw2Ljk1MDAxMi01LjQ0MDAwMiwxNC4wOTAwMjctNy44MDk5OTgsMjEuNDUwMDEyLTcuMTA5OTg1LDcuMzUwMDM3LjY5MDAwMiwxMy40Nzk5OCw0LjE3OTk5MywxOC4zOTAwMTUsMTAuNDUwMDEyLDQuODk5OTYzLDYuMjUsNi43ODk5NzgsMTMuMDE5OTU4LDUuNjc5OTkzLDIwLjMwOTk5OC0xLjEwOTk4NSw3LjI3OTk2OC01LjEzMDAwNSwxMy42NDAwMTUtMTIuMDgwMDE3LDE5LjA3MDAwNy02Ljk0MDAwMiw1LjQ0MDAwMi0xNC4wNzk5NTYsNy44MjAwMDctMjEuNDE5OTgzLDcuMTM5OTU0Wk0xOTIuMTMwMjQsNzIxLjYzMDAwNWw2Ljg1OTk4NS0xNy4xNDAwMTUtMTcuNDYwMDIyLTE2LjA4OTk2Ni0xNi4yOTk5ODgsOC40NDAwMDItNS44MzAwMTctNS4zNjk5OTUsNTQuNDI5OTkzLTI2Ljk0MDAwMiw1Ljk0MDAwMiw1LjQ3OTk4LTIxLjQwOTk3Myw1Ny4zNTk5ODUtNi4yMjk5OC01LjczOTk5Wk0yMzcuMTQwMTg5LDc1My45NzAwMzJsLS44Mjk5NTYtMzQuNjc5OTkzLTEyLjEzMDAwNSwyLjIwOTk2MS0xMS4wMTAwMSwxNi4yNzAwMi02LjIxMDAyMi00LjIwMDAxMiwzMS43NS00Ni45Njk5NzEsNi4yMjAwMzIsNC4yMDk5NjEtMTUuNzUsMjMuMjkwMDM5LDM4LjY0OTk2My03LjgwOTk5OCw4LjQwMDAyNCw1LjY3OTk5My0zMi43MTAwMjIsNS45Nzk5OCwxLjgyMDAwNyw0MS41NzAwMDctOC4yMDAwMTItNS41NDk5ODhaTTMwOS41MDAyMzUsNzQ1LjM1OTk4NWwtNi42MDAwMzctMy4xMjk5NDRjMi4yNjAwMS02LjUyMDAyLS41MTAwMS0xMS42MjAwNTYtOC4zMjAwMDctMTUuMzIwMDA3LTMuNzY5OTU4LTEuNzkwMDM5LTcuMDI5OTY4LTIuNDcwMDMyLTkuNzc5OTY4LTIuMDMwMDI5LTIuNzM5OTkuNDQwMDAyLTQuNjc5OTkzLDEuODMwMDE3LTUuNzg5OTc4LDQuMTkwMDAyLTEuMDIwMDIsMi4xNDAwMTUtLjk1MDAxMiw0LjE0MDAxNS4yMDk5NjEsNiwxLjE2MDAzNCwxLjg1OTk4NSwzLjc4MDAyOSw0LjM4MDAwNSw3Ljg1OTk4NSw3LjUzOTk3OCw0LjA4MDAxNywzLjE2MDAzNCw3LjIyMDAzMiw1Ljg2MDA0Niw5LjQ0MDAwMiw4LjExMDA0NiwyLjIxMDAyMiwyLjI1LDMuNzkwMDM5LDQuODU5OTg1LDQuNzIwMDMyLDcuODIwMDA3LjkyOTk5MywyLjk2OTk3MS41ODAwMTcsNi4xOTAwMDItMS4wNzAwMDcsOS42NTk5NzMtMi4wOTAwMjcsNC40MDAwMjQtNS41NzAwMDcsNy4yMjk5OC0xMC40NjAwMjIsOC40Nzk5OC00Ljg0OTk1NCwxLjI1LTEwLjE0OTk2My41NDAwMzktMTUuNzg5OTc4LTIuMTMwMDA1LTcuMjE5OTcxLTMuNDI5OTkzLTExLjg0OTk3Ni03LjYwOTk4NS0xMy44OTAwMTUtMTIuNTM5OTc4LTIuMDM5OTc4LTQuOTI5OTkzLTEuOTUwMDEyLTkuOTc5OTguMjcwMDItMTUuMTUwMDI0bDYuNTM5OTc4LDMuMTAwMDM3Yy0xLjQ2OTk3MSwzLjk3OTk4LTEuMjE5OTcxLDcuNTU5OTk4Ljc1LDEwLjcyOTk4LDEuOTYwMDIyLDMuMTY5OTgzLDQuOTUwMDEyLDUuNzEwMDIyLDguOTUwMDEyLDcuNjA5OTg1LDMuNzk5OTg4LDEuODAwMDQ5LDcuMjI5OTgsMi40NzAwMzIsMTAuMjg5OTc4LDIuMDEwMDEsMy4wNTAwNDktLjQ2OTk3MSw1LjIyMDAzMi0yLjAzOTk3OCw2LjQ5MDA1MS00LjcxOTk3MSwxLjMyOTk1Ni0yLjgwOTk5OCwxLjEwOTk4NS01LjQyOTk5My0uNjkwMDAyLTcuODUwMDM3LTEuNzkwMDM5LTIuNDE5OTgzLTUuMzIwMDA3LTUuNjM5OTU0LTEwLjU5MDAyNy05LjY2OTk4My01LjI2MDAxLTQuMDIwMDItOC42NTAwMjQtNy43Mzk5OS0xMC4xNTAwMjQtMTEuMTY5OTgzLTEuNS0zLjQxOTk4My0xLjM3OTk0NC02Ljk3MDAzMi4zNzAwNTYtMTAuNjUwMDI0LDEuOTU5OTYxLTQuMTQ5OTYzLDUuMjI5OTgtNi43NjAwMSw5LjgwOTk5OC03LjgzOTk2Niw0LjU3OTk1Ni0xLjA5MDAyNyw5LjYxOTk5NS0uMzIwMDA3LDE1LjExOTk5NSwyLjI3OTk2OCw1Ljc2OTk1OCwyLjczOTk5LDkuNzk5OTg4LDYuMjkwMDM5LDEyLjA3MDAwNywxMC42NTAwMjQsMi4yNjk5NTgsNC4zNTk5ODUsMi4zNDk5NzYsOS4wMjk5NjguMjM5OTksMTQuMDE5OTU4Wk0zODIuMjQwMjI1LDc2NS4xNDAwMTVjLS44NTk5ODUsMy44MjAwMDctMi42OTAwMDIsNi43NzAwMi01LjQ3OTk4LDguODMwMDE3LTIuNzkwMDM5LDIuMDcwMDA3LTYuMTkwMDAyLDMuMDU5OTk4LTEwLjIyMDAzMiwyLjk3OTk4bC0uMDI5OTY4LjE1MDAyNGMzLjU2OTk0NiwyLjA5OTk3Niw1Ljc1LDYuMDg5OTY2LDYuNTQ5OTg4LDExLjk3OTk4bDIuMTU5OTczLDE2LjI5OTk4OC03LjkxOTk4My0xLjc3OTk2OC0xLjkwMDAyNC0xNS45MzAwNTRjLS4zMzk5NjYtMi44MTk5NDYtMS40MDk5NzMtNS4zMDk5OTgtMy4xOTk5NTEtNy40NDk5NTEtMS43OTAwMzktMi4xNTAwMjQtNC4wOTAwMjctMy41NDAwMzktNi45MTAwMzQtNC4xNzAwNDRsLTEzLjUzOTk3OC0zLjAzOTk3OC01LjMyMDAwNywyMy42NTAwMjQtNy4zMjAwMDctMS42NDAwMTUsMTIuNDI5OTkzLTU1LjMyMDAwNywyNC40Nzk5OCw1LjVjNC4yODAwMjkuOTYwMDIyLDcuNjgwMDU0LDIuMTY5OTgzLDEwLjIxMDAyMiwzLjYwOTk4NSwyLjUzMDAyOSwxLjQ0MDAwMiw0LjM0OTk3NiwzLjY3OTk5Myw1LjQ3MDAzMiw2LjczMDA0MiwxLjEwOTk4NSwzLjA0OTk4OCwxLjI4OTk3OCw2LjI1LjUzOTk3OCw5LjU5OTk3NlpNNDI3Ljc3MDE5NCw4MDkuMjkwMDM5bC01LjUzOTk3OC0xNy42MTAwNDYtMjMuNzAwMDEyLTEuNDA5OTczLTcuMjc5OTY4LDE2LjgzOTk2Ni03LjkxMDAzNC0uNDY5OTcxLDI1LjExMDA0Ni01NS4yOTk5ODgsOC4wNjk5NDYuNDc5OTgsMTkuNzAwMDEyLDU3Ljk3OTk4LTguNDUwMDEyLS41MDk5NDlaTTQ4My43NDAyMjUsODA1LjU0OTk4OGwtMzQuMDMwMDI5LTQxLjUzOTk3OCw0LjQ4MDA0Miw0NC41MjAwMi03LjA4MDAxNy43MDk5NjEtNS42Nzk5OTMtNTYuNDA5OTczLDcuNjE5OTk1LS43NjAwMSwzNC4wMjk5NjgsNDEuNTM5OTc4LTQuNDc5OTgtNDQuNTE5OTU4LDcuMTE5OTk1LS43MTAwMjIsNS42Nzk5OTMsNTYuNDAwMDI0LTcuNjU5OTczLjc2OTk1OFpNNTQ1LjgxMDIzMyw3ODcuMjMwMDQyYy0zLjE3OTk5Myw0LjI4OTk3OC03Ljg1OTk4NSw3LjI4OTk3OC0xNC4wNDk5ODgsOC45ODk5OS03LjczMDA0MiwyLjExOTk5NS0xNC42MDAwMzcsMS4yNzk5NjgtMjAuNjEwMDQ2LTIuNTQwMDM5cy0xMC4xOTk5NTEtMTAuMDU5OTk4LTEyLjU4OTk2Ni0xOC43Mzk5OWMtMi4zODAwMDUtOC42Nzk5OTMtMS45NjAwMjItMTYuMTkwMDAyLDEuMjUtMjIuNTM5OTc4LDMuMjE5OTcxLTYuMzUwMDM3LDguNjkwMDAyLTEwLjU5MDAyNywxNi40MTk5ODMtMTIuNzEwMDIyLDUuOTUwMDEyLTEuNjMwMDA1LDExLjQ0MDAwMi0xLjQxOTk4MywxNi41LjY0MDAxNXM4LjU3MDAwNyw1LjY0MDAxNSwxMC41MzAwMjksMTAuNzM5OTlsLTcuNDYwMDIyLDIuMDQ5OTg4Yy0xLjIzOTk5LTMuMzY5OTk1LTMuNS01LjcwOTk2MS02Ljc1LTcuMDEwMDEtMy4yNjAwMS0xLjI4OTk3OC02Ljk0MDAwMi0xLjM3OTk0NC0xMS4wMzk5NzgtLjI1LTUuNTUwMDQ5LDEuNTIwMDItOS40MTAwMzQsNC42MzAwMDUtMTEuNTkwMDI3LDkuMzQwMDI3LTIuMTkwMDAyLDQuNzAwMDEyLTIuMzA5OTk4LDEwLjU5MDAyNy0uMzU5OTg1LDE3LjY3OTk5MywxLjk0MDAwMiw3LjA1OTk5OCw1LjAzOTk3OCwxMi4wNTk5OTgsOS4yOTk5ODgsMTUuMDEwMDEsNC4yNSwyLjk1MDAxMiw5LjEzMDAwNSwzLjY2OTk4MywxNC42MzAwMDUsMi4xNTk5NzMsNC4yNzAwMi0xLjE2OTk4Myw3LjQ0MDAwMi0zLjE2OTk4Myw5LjUtNS45Nzk5OHMyLjczOTk5LTYuMjAwMDEyLDIuMDIwMDItMTAuMTc5OTkzbDcuNDU5OTYxLTIuMDQ5OTg4YzEuMDcwMDA3LDUuOTU5OTYxLjAyMDAyLDExLjA0OTk2Ni0zLjE1OTk3MywxNS4zOTAwMTVaTTYwMS40ODAyMTYsNzY4LjE5MDAwMmwtMTEuMjI5OTgtMjQuMjAwMDEyLTI2LjczMDA0MiwxMi40MTAwMzQsMTEuMjQwMDUxLDI0LjIwMDAxMi02LjgwOTk5OCwzLjE1OTk3My0yMy44NzAwNTYtNTEuNDE5OTgzLDYuODAwMDQ5LTMuMTYwMDM0LDkuODA5OTk4LDIxLjExMDA0NiwyNi43MTk5NzEtMTIuNDAwMDI0LTkuNzk5OTg4LTIxLjExOTk5NSw2Ljg0MDAyNy0zLjE3OTk5MywyMy44Njk5OTUsNTEuNDI5OTkzLTYuODQwMDI3LDMuMTY5OTgzWk00MzIuMDAwMjM1LDY5Mi42Nzk5OTNjLTEzOS44NjAwNDYsMC0yNTQuMzQwMDI3LTExMC43MTk5NzEtMjYwLjQyOTk5My0yNDkuMTA5OTg1aDE1My43OTk5ODh2LTUyLjgzMDAxN2M0Ljg1OTk4NS0yLjIwOTk2MSw4LjM4MDAwNS0zLjg5OTk2MywxMC4yNS00Ljk2OTk3MS42MzAwMDUtLjM1OTk4NSwyLjg2OTk5NS0xLjY2MDAzNCw0LjIzOTk5LS43OTk5ODgsMy4zODAwMDUsNS4zMzk5NjYsMTAuMzMwMDE3LDcuNSwxNi44MjAwMDcsOS4wMzk5NzgsMS44OTAwMTUuNzk5OTg4LDguMTkwMDAyLDMuMjM5OTksMTQuOTg5OTkuNjU5OTczLDkuMTUwMDI0LTIuOTA5OTczLDE3Ljc4MDAyOS0xOS4yNSwyNi40MTk5ODMtMTguNjg5OTQxLDUuMTE5OTk1LDIuNTM5OTc4LDYuODY5OTk1LDcuMzQ5OTc2LDEwLjc1LDExLjEyOTk0NCwxNi4wODAwMTcsOC44NzAwNTYsMTcuNjYwMDM0LTYuNjI5OTQ0LDE4LjA5MDAyNy0xOC4yNSwxLjE1OTk3My03LjU5OTk3NiwxMS44NTk5ODUtMTQuNTc5OTU2LDE3LjcyOTk4LTYuMjI5OTgsNi4yMTAwMjIsNy45MDAwMjQsMTUuMDIwMDIsMzEuNjMwMDA1LDI0LjE2OTk4MywzMi42NTAwMjQsMTAuMjQwMDUxLjE1OTk3MywxMi43MzAwNDItNy4yMzAwNDIsMTMtMTIuMzIwMDA3LDEuMDMwMDI5LTkuNDQwMDAyLTMuNDY5OTcxLTE2LjcyMDAzMiw1LjAzMDAyOS0yNS41ODAwMTcsMTAuMjcwMDItNi45Nzk5OCwyMy41Mjk5NjgtLjM0OTk3NiwzMi45NDAwMDItMS4xMTk5OTUsMTAuODkwMDE1LjMyMDAwNywxNi4zNjk5OTUuNDc5OTgsMjAuMTU5OTczLTEuMTMwMDA1LDExLjkwMDAyNC00LjMzOTk2NiwxNC4xNTAwMjQsMy40Nzk5OCw3LjczMDA0MiwxMi4wMzk5NzgtNS45MDAwMjQsNi43OTAwMzktMTIuMjIwMDMyLDM0Ljg2MDA0Niw4LjczOTk5LDM0Ljc4MDAyOSwxMC40ODk5OS0xLjk2MDAyMiwxNi42Njk5ODMtOC4wODAwMTcsMjYuMDM5OTc4LTEyLjA5OTk3Niw1LjkwMDAyNC0xLjI3MDAyLDEwLjcyMDAzMiwzLjkyOTk5Myw4LjkwMDAyNCw4LjYwOTk4NS0yLjcyMDAzMiw2Ljc3OTk2OC0xMS43MTAwMjIsMTMuODMwMDE3LTguNjA5OTg1LDIxLjU4MDAxNywzLjUxOTk1OCw0LjE5OTk1MSwxMS44Nzk5NDQsMy45NDAwMDIsMTMuOTQ5OTUxLDMuMzM5OTY2LDQuODYwMDQ2LS44MDk5OTgsMTAuNDEwMDM0LTIuNDg5OTksMjAuNjE5OTk1LTEuMzk5OTYzLDIuNjcwMDQ0LjMxOTk0Niw2LjUzMDAyOSwxLjA0OTk4OCwxMS4wNTAwNDksMi44MDk5OTgsMjIuNTc5OTU2LDE1LjY5MDAwMiwzOC4yNjk5NTgsNC44Njk5OTUsNDMuNzU5OTQ5LTE5LjY1MDAyNCwxLjg2MDA0Ni0xMS4wNTk5OTgsMS44NTAwMzctMTkuMDgwMDE3LTUuMzM5OTY2LTI1LjQ0MDAwMi0xLjY2MDAzNC0uOTc5OTgtOS42Nzk5OTMtOS4xMzAwMDUtMTUuMjAwMDEyLTkuMjAwMDEyLTkuMDEwMDEuNTgwMDE3LTI4LjQxOTk4MywxMi40NjAwMjItMzQuMjAwMDEyLDQuODIwMDA3LTIuNTQ5OTg4LTIuOTUwMDEyLTEuODM5OTY2LTQuOTE5OTgzLDEuMTE5OTk1LTcuOTQwMDAyLDIuNzIwMDMyLTYuODk5OTYzLDcuODYwMDQ2LTE1LjMzMDAxNyw1Ljg2MDA0Ni0yMy40NDAwMDItMi43MzAwNDItNi44OTk5NjMtMTEuMTAwMDM3LTExLjU1OTk5OC0xNy45NTAwMTItOC43Mzk5OS03LjAxMDAxLDEuMzA5OTk4LTE3LjU0MDAzOSw5Ljk1MDAxMi0yMy42Njk5ODMsMy45MDk5NzMtLjgzMDAxNy0xMy4wNzk5NTYsMTIuNDA5OTczLTIxLjc1LDEyLjU0OTk4OC0zMi45Mjk5OTMtMS40NjAwMjItOC4wOTk5NzYtNy44OTAwMTUtMTEuOTc5OTgtMTQuNTQ5OTg4LTE0LjA3OTk1Ni0xMi4wMjAwMi0yLjI3MDAyLTEyLjkwMDAyNCwxMi43OTk5ODgtMjYuODQwMDI3LDEwLjUxOTk1OC0xMi4yODk5NzgtMy42Mzk5NTQtMzQuNTcwMDA3LTEzLTM4LjUtMTQuMTQ5OTYzLTguNzg5OTc4LTUuMzA5OTk4LTE0LjY5MDAwMiwxMC42MzAwMDUtMTUuMjgwMDI5LDExLjMzOTk2Ni01LjE1OTk3MywxMy4yMjAwMzItLjkzOTk0MSwxMy4yMDAwMTItNy4zNDk5NzYsMjMuODIwMDA3LTEuNzEwMDIyLDIuNDI5OTkzLTMuMTY5OTgzLDQuNjMwMDA1LTUuNDc5OTgsMi44MDk5OTgtNi4yMTAwMTItNC45Nzk5OC0zLjg0MDAyNy0yMS43NjAwMS0yMC4xNzAwNDQtMjYuMzMwMDE3LTcuMTk5OTUxLTEuNjkwMDAyLTE1LjE4OTk0MS44OTAwMTUtMTkuNTA5OTQ5LDEyLjIzMDA0Mi00LjgyMDAwNyw1LjY2OTk4My0xLjI1LDE5LjI2OTk1OC04LjkwMDAyNCwyMC43MDAwMTItOC4yMTk5NzEuNTg5OTY2LTYuNS0xOS41NzAwMDctMjMuNjU5OTczLTE1LjgwMDA0OS0zLjYxMDA0Ni45NTAwMTItNy41OTAwMjcsNi05LjA1OTk5OCw3Ljg2MDA0Ni0xLjg3MDA1NiwyLjc1OTk0OS03LjEwMDAzNyw4LjUyOTk2OC0yMC4xNzAwNDQsMjAuNzc5OTY4LTkuNDI5OTkzLDcuNDcwMDMyLTE2LjkyOTk5MywxNi44MDk5OTgtMjcuMjg5OTc4LDIyLjk3OTk4LTUuMzIwMDA3LDEuMTcwMDQ0LTMuODQwMDI3LTEuNTI5OTY4LTEwLjUzOTk3OC0xLjMzOTk2Ni03LjAzMDAyOSwxLjM5MDAxNS0xOS45MjAwNDQsMS4zMDk5OTgtMjIuNjQwMDE1LDEuMTU5OTczdi05OS4zNjk5OTVoLTk3LjA3MDAwN2M0OS4zMDk5OTgtNjEuNzI5OTgsMTIzLjkyOTk5My05Ny45ODk5OSwyMDMuNzAwMDEyLTk3Ljk4OTk5LDEyLjgyMDAwNywwLDI1LjcxOTk3MS45NDAwMDIsMzguMzI5OTU2LDIuNzg5OTc4LDEyNi43NjAwMSwxOC42ODAwNTQsMjIyLjM1MDAzNywxMjkuNTQwMDM5LDIyMi4zNTAwMzcsMjU3Ljg5MDAxNSwwLDE0My43Mzk5OS0xMTYuOTQwMDAyLDI2MC42Nzk5OTMtMjYwLjY3OTk5MywyNjAuNjc5OTkzWk02NDkuNTgwMTkxLDcxOS43MTAwMjJjLTEwLjAxOTk1OCwwLTE4LjE0OTk2My04LjE0MDAxNS0xOC4xNDk5NjMtMTguMTYwMDM0LDAtMTAuMDE5OTU4LDguMTMwMDA1LTE4LjE1OTk3MywxOC4xNDk5NjMtMTguMTU5OTczLDEwLjAzMDAyOSwwLDE4LjE2MDAzNCw4LjE0MDAxNSwxOC4xNjAwMzQsMTguMTU5OTczLDAsMTAuMDIwMDItOC4xMzAwMDUsMTguMTYwMDM0LTE4LjE2MDAzNCwxOC4xNjAwMzRaTTcxOS43MTAxOTYsNjczLjA5MDAyN2wtMzguNzA5OTYxLTMxLjU5MDAyNy0xMS43NjAwMSwxNC40MTAwMzQtNS4yMTAwMjItNC4yNSwyOC4zOTAwMTUtMzQuNzkwMDM5LDUuMjEwMDIyLDQuMjYwMDEtMTEuODYwMDQ2LDE0LjUzMDAyOSwzOC43MTAwMjIsMzEuNTg5OTY2LTQuNzcwMDIsNS44NDAwMjdaTTc0My4yNDAyMjUsNjQyLjYwOTk4NWwtNDguNjE5OTk1LTI5LjE1OTk3MywyMS4wNTk5OTgtMzUuMTE5OTk1LDUuNzcwMDIsMy40NjAwMjItMTcuMjAwMDEyLDI4LjY5MDAwMiwxNC44NTk5ODUsOC45MDk5NzMsMTYuMDkwMDI3LTI2LjgzMDAxNyw1Ljc2OTk1OCwzLjQ2MDAyMi0xNi4wODk5NjYsMjYuODMwMDE3LDE2LjQ0OTk1MSw5Ljg1OTk4NSwxNy44ODAwMDUtMjkuODA5OTk4LDUuNzcwMDIsMy40NTk5NjEtMjEuNzM5OTksMzYuMjVaTTc0Ny45OTAyMjUsNDU5LjY2OTk4M2MuNTEwMDEtNi4zNzk5NDQsMi4zOTk5NjMtMTEuMzk5OTYzLDUuNjU5OTczLTE1LjA2OTk0NiwzLjI3MDAyLTMuNjcwMDQ0LDcuNjEwMDQ2LTUuNDEwMDM0LDEzLjAzMDAyOS01LjIxMDAyMmwtLjU4MDAxNyw3LjI4OTk3OGMtNi44OTk5NjMuMjAwMDEyLTEwLjY5MDAwMiw0LjYwMDAzNy0xMS4zODAwMDUsMTMuMjEwMDIyLS4zMzAwMTcsNC4xNTk5NzMuMjAwMDEyLDcuNDUwMDEyLDEuNTkwMDI3LDkuODU5OTg1LDEuMzgwMDA1LDIuNDE5OTgzLDMuMzY5OTk1LDMuNzMwMDQyLDUuOTY5OTcxLDMuOTI5OTkzLDIuMzU5OTg1LjE5MDAwMiw0LjIxMDAyMi0uNTg5OTY2LDUuNTQwMDM5LTIuMzI5OTU2LDEuMzI5OTU2LTEuNzQwMDUxLDIuNzM5OTktNS4wODAwMTcsNC4yNS0xMC4wMjAwMiwxLjUtNC45NDAwMDIsMi45MDk5NzMtOC44NDAwMjcsNC4yMjk5OC0xMS43MTAwMjIsMS4zMDk5OTgtMi44Njk5OTUsMy4xOTAwMDItNS4yNjk5NTgsNS42MzAwMDUtNy4xOTAwMDIsMi40NTAwMTItMS45Mjk5OTMsNS41ODAwMTctMi43Mzk5OSw5LjQwOTk3My0yLjQ0MDAwMiw0Ljg2MDA0Ni4zOTAwMTUsOC43Mzk5OSwyLjY1MDAyNCwxMS42NDAwMTUsNi43NzAwMiwyLjkwOTk3Myw0LjExOTk5NSw0LjEwOTk4NSw5LjI5OTk4OCwzLjYxOTk5NSwxNS41MjAwMi0uNjQwMDE1LDcuOTU5OTYxLTIuODk5OTYzLDEzLjc3OTk2OC02Ljc3OTk2OCwxNy40NDAwMDItMy44OTAwMTUsMy42NTk5NzMtOC42NDAwMTUsNS4zNjk5OTUtMTQuMjYwMDEsNS4xMzAwMDVsLjU3MDAwNy03LjIxMDAyMmM0LjI1LS4wNDk5ODgsNy41LTEuNTU5OTk4LDkuNzY5OTU4LTQuNTIwMDIsMi4yNzAwMi0yLjk1OTk2MSwzLjU3MDAwNy02LjY0OTk2MywzLjkyOTk5My0xMS4wNzAwMDcuMzMwMDE3LTQuMTkwMDAyLS4yNTk5NDktNy42MzAwMDUtMS43Nzk5NjgtMTAuMzI5OTU2LTEuNTIwMDItMi42OTAwMDItMy43NjAwMS00LjE2MDAzNC02LjcxMDAyMi00LjM5MDAxNS0zLjEwOTk4NS0uMjUtNS40Nzk5OC44OTAwMTUtNy4wOTk5NzYsMy40Mjk5OTMtMS42MzAwMDUsMi41MzAwMjktMy4zODAwMDUsNi45Nzk5OC01LjI3MDAyLDEzLjMzMDAxNy0xLjg5MDAxNSw2LjM1OTk4NS00LjE2OTk4MywxMC44Mzk5NjYtNi44Mzk5NjYsMTMuNDU5OTYxLTIuNjYwMDM0LDIuNjE5OTk1LTYuMDIwMDIsMy43NzAwMi0xMC4wOTAwMjcsMy40NTAwMTItNC41NzAwMDctLjM2OTk5NS04LjE3OTk5My0yLjUtMTAuODA5OTk4LTYuMzkwMDE1LTIuNjQwMDE1LTMuODk5OTYzLTMuNzE5OTcxLTguODc5OTQ0LTMuMjM5OTktMTQuOTQwMDAyWk03NDIuMjQwMjI1LDUwMy41NDk5ODhsNjAuNTEwMDEtOS4zNDk5NzYtMS45NjAwMjIsOC4yMzk5OS0xOC4yOTk5ODgsMi4zOTAwMTUtNS41MTAwMSwyMy4wOTk5NzYsMTUuMzMwMDE3LDEwLjEwMDAzNy0xLjg0MDAyNyw3LjcwOTk2MS01MC4wOTk5NzYtMzQuMzI5OTU2LDEuODY5OTk1LTcuODYwMDQ2Wk03MzIuMjEwMTk2LDUzOS4yOTAwMzlsMy40NjAwMjItOC40ODAwNDIsMTcuNDAwMDI0LDI4LjM2OTk5NSwzNS44OTk5NjMtOC45Mjk5OTMtMy40Nzk5OCw4LjUyMDAyLTI4LjU4MDAxNyw2LjQ1MDAxMiwxNS44NTAwMzcsMjQuNjk5OTUxLTMuNDgwMDQyLDguNTIwMDItMTkuMzk5OTYzLTMxLjQ1MDAxMi0zMi4yNjAwMSw4LDMuNDY5OTcxLTguNDg5OTksMjQuOTUwMDEyLTUuNjQwMDE1LTEzLjgzMDAxNy0yMS41Njk5NDZaIi8+Cjwvc3ZnPgo=">
+    <div class="header-divider"></div>
+    <div class="header-text">
+        <h1>Drainage Infrastructure</h1>
+        <div class="header-desc">An overview of the city's stormwater drainage system, condition assessments and inspection progress.</div>
+    </div>
+    <div class="header-updated" id="headerUpdated"></div>
+</header>
+
+<div class="container">
+
+    <!-- KPIs -->
+    <div class="kpi-row">
+        <div class="kpi">
+            <div class="kpi-label">Total Infrastructure</div>
+            <div class="kpi-value" id="kpiTotal">&mdash;</div>
+            <div class="kpi-sub" id="kpiTotalSub">loading</div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-label">Culverts</div>
+            <div class="kpi-value" id="kpiCulverts">&mdash;</div>
+            <div class="kpi-sub" id="kpiCulvertsSub"></div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-label">Miles of Drainage Channels</div>
+            <div class="kpi-value" id="kpiMiles">&mdash;</div>
+            <div class="kpi-sub" id="kpiMilesSub"></div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-label">Structures</div>
+            <div class="kpi-value" id="kpiStructures">&mdash;</div>
+            <div class="kpi-sub">Inlets, outlets and junctions</div>
+        </div>
+    </div>
+
+    <!-- Inspection progress -->
+    <div class="section-label">Inspection Status</div>
+    <div class="inspection-row">
+        <div class="inspection-card">
+            <div class="inspection-ring">
+                <svg width="96" height="96" viewBox="0 0 96 96">
+                    <circle class="inspection-ring-bg" cx="48" cy="48" r="40"/>
+                    <circle class="inspection-ring-fill" id="inspRingFill" cx="48" cy="48" r="40"
+                            stroke-dasharray="251.33" stroke-dashoffset="251.33"/>
+                </svg>
+                <div class="inspection-ring-pct" id="inspPct">&mdash;</div>
+            </div>
+            <div class="inspection-details">
+                <div class="inspection-title">Overall Inspection Coverage</div>
+                <div class="inspection-stats">
+                    <div class="inspection-stat">
+                        <span>Total inspections performed</span>
+                        <span class="inspection-stat-val" id="inspTotal">&mdash;</span>
+                    </div>
+                    <div class="inspection-stat">
+                        <span>Assets not yet inspected</span>
+                        <span class="inspection-stat-val" id="inspRemaining">&mdash;</span>
+                    </div>
+                    <div class="inspection-stat">
+                        <span>Total assets</span>
+                        <span class="inspection-stat-val" id="inspAssets">&mdash;</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="inspection-card" style="flex-direction: column; align-items: stretch; gap: 14px;">
+            <div class="inspection-title">Inspection Coverage by Asset Type</div>
+            <div class="insp-breakdown" id="inspBreakdown">
+                <!-- filled by JS -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Condition summary -->
+    <div class="section-label">Condition Overview</div>
+    <div class="condition-row">
+        <div class="condition-pill good">
+            <div class="pill-dot"></div>
+            <div class="pill-label">Good Condition</div>
+            <div class="pill-value" id="condGood">&mdash;<span class="pill-pct" id="condGoodPct"></span></div>
+        </div>
+        <div class="condition-pill fair">
+            <div class="pill-dot"></div>
+            <div class="pill-label">Fair Condition</div>
+            <div class="pill-value" id="condFair">&mdash;<span class="pill-pct" id="condFairPct"></span></div>
+        </div>
+        <div class="condition-pill poor">
+            <div class="pill-dot"></div>
+            <div class="pill-label">Poor Condition</div>
+            <div class="pill-value" id="condPoor">&mdash;<span class="pill-pct" id="condPoorPct"></span></div>
+        </div>
+    </div>
+
+    <!-- Charts -->
+    <div class="charts-row">
+        <div class="chart-card">
+            <div class="chart-card-title">Condition by Asset Type</div>
+            <div class="chart-wrap"><canvas id="conditionChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+            <div class="chart-card-title">Culvert Material</div>
+            <div class="chart-wrap"><canvas id="materialChart"></canvas></div>
+        </div>
+    </div>
+
+    <!-- Map -->
+    <div class="section-label">Infrastructure Map</div>
+    <div class="map-section">
+        <div class="map-header">
+            <div class="map-header-title">Infrastructure Map</div>
+            <div class="map-search-bar" id="searchWrap">
+                <span class="map-search-icon">&#128269;</span>
+                <input class="map-search-input" id="searchInput" type="text"
+                       placeholder="Search by address..." autocomplete="off">
+                <button class="map-search-clear" id="searchClear">&times;</button>
+                <div class="map-search-results" id="searchResults"></div>
+            </div>
+        </div>
+        <div id="mapView"></div>
+        <div class="map-legend-bar">
+            <div class="legend-group">
+                <span class="legend-group-label">Culvert condition</span>
+                <span class="lg-swatch" style="background:#3A8A5C;"></span> Good
+                <span class="lg-swatch" style="background:#C4860B;"></span> Fair
+                <span class="lg-swatch" style="background:#C0392B;"></span> Poor
+            </div>
+            <div class="legend-group">
+                <span class="legend-group-label">Channels</span>
+                <span class="lg-dash" style="color:#3A8A5C;"></span> Channel
+            </div>
+            <div class="legend-group">
+                <span class="legend-group-label">Structures</span>
+                <span class="lg-dot" style="background:#2D5E47;"></span> Inlet/Outlet
+                <span class="lg-dot" style="background:#8A948E;"></span> Junction
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="footer">
+    City of Fair Oaks Ranch &middot; Public Works Department &middot; This data is for informational purposes only and is not intended for legal or engineering use.
+</div>
+
+<script>
+(function () {
+    "use strict";
+
+    var DRAINAGE = "https://services6.arcgis.com/Cnwpb7mZuifVHE6A/ArcGIS/rest/services/City_of_Fair_Oaks_Ranch_Drainage_Inventory_(Public_View)/FeatureServer";
+    var CTX = {
+        jurisdictional: "https://services6.arcgis.com/Cnwpb7mZuifVHE6A/ArcGIS/rest/services/FOR_Jurisdictional/FeatureServer",
+        parcels: { portalItem: "bd5079b30310433998c6a54652074dd6", sublayer: 0 },
+        roads: "https://services6.arcgis.com/Cnwpb7mZuifVHE6A/ArcGIS/rest/services/CoFORPW_Road_Public/FeatureServer/0"
+    };
+    var DL = {
+        structures: { id: 1, name: "Structures", color: "#2D5E47" },
+        channels:   { id: 2, name: "Channels",   color: "#3A8A5C" },
+        basins:     { id: 3, name: "Basins",      color: "#D4E5DC" },
+        culverts:   { id: 4, name: "Culverts",    color: "#1B3A2D" }
+    };
+
+    /* ── Query helpers ── */
+    async function qry(lid, p) {
+        p = p || {};
+        var body = new URLSearchParams({ where: p.where || "1=1", f: "json" });
+        if (p.returnCountOnly) body.set("returnCountOnly", "true");
+        else if (p.outStatistics) {
+            body.set("outStatistics", JSON.stringify(p.outStatistics));
+            if (p.groupByFieldsForStatistics) body.set("groupByFieldsForStatistics", p.groupByFieldsForStatistics);
+        } else {
+            body.set("outFields", p.outFields || "*");
+            body.set("returnGeometry", String(p.returnGeometry || false));
+        }
+        var r = await fetch(DRAINAGE + "/" + lid + "/query", {
+            method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: body
+        });
+        return r.json();
+    }
+    async function cnt(lid, w) { var r = await qry(lid, { returnCountOnly: true, where: w || "1=1" }); return r.count || 0; }
+    async function grp(lid, fld) {
+        var r = await qry(lid, {
+            outStatistics: [{ statisticType: "count", onStatisticField: fld, outStatisticFieldName: "n" }],
+            groupByFieldsForStatistics: fld
+        });
+        var o = {};
+        (r.features || []).forEach(function (f) { o[f.attributes[fld] || "Unknown"] = f.attributes.n || 0; });
+        return o;
+    }
+
+    /* ── Chart config ── */
+    var CF = { family: "'DM Sans', sans-serif" };
+
+    /* ── KPIs ── */
+    async function loadKPIs() {
+        var cC = await cnt(DL.culverts.id);
+        var chC = await cnt(DL.channels.id);
+        var sC = await cnt(DL.structures.id);
+        var total = cC + chC + sC;
+
+        document.getElementById("kpiTotal").textContent = total.toLocaleString();
+        document.getElementById("kpiTotalSub").textContent = "Culverts, channels and structures maintained by the city";
+        document.getElementById("kpiCulverts").textContent = cC.toLocaleString();
+
+        var ms = await grp(DL.culverts.id, "Material");
+        var tm = Object.entries(ms).sort(function (a, b) { return b[1] - a[1]; });
+        if (tm.length) document.getElementById("kpiCulvertsSub").textContent = tm.slice(0, 3).map(function (m) { return m[1] + " " + m[0]; }).join(", ");
+
+        var lr = await qry(DL.channels.id, {
+            outStatistics: [{ statisticType: "sum", onStatisticField: "Shape__Length", outStatisticFieldName: "len" }]
+        });
+        var ft = (lr.features && lr.features[0]) ? lr.features[0].attributes.len || 0 : 0;
+        var mi = (ft / 5280).toFixed(1);
+        document.getElementById("kpiMiles").innerHTML = mi + '<span class="kpi-unit">mi</span>';
+        document.getElementById("kpiMilesSub").textContent = Math.round(ft).toLocaleString() + " linear feet across " + chC + " segments";
+        document.getElementById("kpiStructures").textContent = sC.toLocaleString();
+
+        return { total: total, matStats: ms, counts: { culverts: cC, channels: chC, structures: sC } };
+    }
+
+    /* ── Inspection metrics ── */
+    async function loadInspections(counts) {
+        // Query count of features where LastInspectionDate IS NOT NULL for each inspectable layer
+        var layers = [
+            { key: "culverts",   id: DL.culverts.id,   label: "Culverts",    total: counts.culverts,   field: "LastInspectionDate" },
+            { key: "structures", id: DL.structures.id,  label: "Structures",  total: counts.structures, field: "LastInspectionDate" },
+            { key: "channels",   id: DL.channels.id,    label: "Channels",    total: counts.channels,   field: "LastInspectionDate" }
+        ];
+
+        var results = [];
+        for (var i = 0; i < layers.length; i++) {
+            var l = layers[i];
+            var inspected = 0;
+            try {
+                inspected = await cnt(l.id, l.field + " IS NOT NULL");
+            } catch (e) {
+                // Field may not exist on this layer — treat as 0 inspected
+                inspected = 0;
+            }
+            results.push({ label: l.label, total: l.total, inspected: inspected });
+        }
+
+        var totalAssets = results.reduce(function (a, r) { return a + r.total; }, 0);
+        var totalInspected = results.reduce(function (a, r) { return a + r.inspected; }, 0);
+        var pct = totalAssets > 0 ? Math.round((totalInspected / totalAssets) * 100) : 0;
+
+        // Update ring
+        var circumference = 2 * Math.PI * 40; // 251.33
+        var offset = circumference - (pct / 100) * circumference;
+        var ring = document.getElementById("inspRingFill");
+        ring.style.strokeDashoffset = offset;
+        // Color the ring based on coverage
+        if (pct < 25) ring.style.stroke = "#C0392B";
+        else if (pct < 60) ring.style.stroke = "#C4860B";
+        else ring.style.stroke = "#3A8A5C";
+
+        document.getElementById("inspPct").textContent = pct + "%";
+        document.getElementById("inspTotal").textContent = totalInspected.toLocaleString();
+        document.getElementById("inspRemaining").textContent = (totalAssets - totalInspected).toLocaleString();
+        document.getElementById("inspAssets").textContent = totalAssets.toLocaleString();
+
+        // Breakdown bars
+        var container = document.getElementById("inspBreakdown");
+        container.innerHTML = "";
+        results.forEach(function (r) {
+            var p = r.total > 0 ? Math.round((r.inspected / r.total) * 100) : 0;
+            var barColor = p < 25 ? "#C0392B" : (p < 60 ? "#C4860B" : "#3A8A5C");
+            container.innerHTML +=
+                '<div class="insp-bar-row">' +
+                    '<div class="insp-bar-label">' + r.label + '</div>' +
+                    '<div class="insp-bar-track"><div class="insp-bar-fill" style="width:' + p + '%;background:' + barColor + '"></div></div>' +
+                    '<div class="insp-bar-pct">' + r.inspected + '/' + r.total + '</div>' +
+                '</div>';
+        });
+    }
+
+    /* ── Condition pills ── */
+    async function loadCondition() {
+        var res = await Promise.all([
+            grp(DL.culverts.id, "Condition"),
+            grp(DL.channels.id, "Condition"),
+            grp(DL.structures.id, "Condition")
+        ]);
+        var c = {};
+        res.forEach(function (s) { Object.entries(s).forEach(function (e) { c[e[0]] = (c[e[0]] || 0) + e[1]; }); });
+        var total = Object.values(c).reduce(function (a, b) { return a + b; }, 0);
+        var g = c.Good || 0, f = c.Fair || 0, p = c.Poor || 0;
+
+        function pct(v) { return total > 0 ? Math.round((v / total) * 100) : 0; }
+
+        document.getElementById("condGood").innerHTML = g + '<span class="pill-pct"> (' + pct(g) + '%)</span>';
+        document.getElementById("condFair").innerHTML = f + '<span class="pill-pct"> (' + pct(f) + '%)</span>';
+        document.getElementById("condPoor").innerHTML = p + '<span class="pill-pct"> (' + pct(p) + '%)</span>';
+
+        return { byLayer: res, combined: c };
+    }
+
+    /* ── Condition stacked bar ── */
+    function buildConditionChart(byLayer) {
+        var labels = ["Culverts", "Channels", "Structures"];
+        new Chart(document.getElementById("conditionChart"), {
+            type: "bar",
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: "Good", data: byLayer.map(function (s) { return s.Good || 0; }), backgroundColor: "#3A8A5C", borderRadius: 2 },
+                    { label: "Fair", data: byLayer.map(function (s) { return s.Fair || 0; }), backgroundColor: "#C4860B", borderRadius: 2 },
+                    { label: "Poor", data: byLayer.map(function (s) { return s.Poor || 0; }), backgroundColor: "#C0392B", borderRadius: 2 }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: "bottom", labels: { color: "#5A6B62", font: Object.assign({}, CF, { size: 12 }), padding: 14, usePointStyle: true, pointStyleWidth: 8 } }
+                },
+                scales: {
+                    x: { stacked: true, ticks: { color: "#5A6B62", font: Object.assign({}, CF, { size: 12 }) }, grid: { display: false } },
+                    y: { stacked: true, ticks: { color: "#8A948E", font: Object.assign({}, CF, { size: 11 }) }, grid: { color: "rgba(0,0,0,0.04)" }, beginAtZero: true }
+                }
+            }
+        });
+    }
+
+    /* ── Material chart ── */
+    function buildMaterialChart(ms) {
+        var sorted = Object.entries(ms).sort(function (a, b) { return b[1] - a[1]; });
+        var labels = sorted.map(function (s) { return s[0]; });
+        var data = sorted.map(function (s) { return s[1]; });
+        var palette = ["#1B3A2D", "#2D5E47", "#3A8A5C", "#8A948E", "#C4860B", "#D4E5DC"];
+
+        new Chart(document.getElementById("materialChart"), {
+            type: "bar",
+            data: { labels: labels, datasets: [{ data: data, backgroundColor: palette.slice(0, data.length), borderWidth: 0, borderRadius: 3, maxBarThickness: 42 }] },
+            options: {
+                responsive: true, maintainAspectRatio: false, indexAxis: "y",
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { ticks: { color: "#8A948E", font: Object.assign({}, CF, { size: 11 }) }, grid: { color: "rgba(0,0,0,0.04)" } },
+                    y: { ticks: { color: "#5A6B62", font: Object.assign({}, CF, { size: 12 }) }, grid: { display: false } }
+                }
+            }
+        });
+    }
+
+    /* ── Map ── */
+    function initMap() {
+        require([
+            "esri/Map", "esri/views/MapView", "esri/layers/FeatureLayer",
+            "esri/identity/IdentityManager"
+        ], function (Map, MapView, FeatureLayer, esriId) {
+
+            esriId.getCredential = function () { return Promise.reject(new Error("Auth suppressed")); };
+
+            var map = new Map({ basemap: "gray-vector" });
+            var view = new MapView({
+                container: "mapView", map: map,
+                ui: { components: ["zoom", "attribution"] },
+                popup: { dockOptions: { buttonEnabled: false, position: "bottom-right" } }
+            });
+
+            var jurisdictional = new FeatureLayer({
+                url: CTX.jurisdictional, title: "City Boundary",
+                renderer: { type: "simple", symbol: { type: "simple-fill", color: [0,0,0,0], outline: { color: [27,58,45,0.25], width: 1.5 } } },
+                popupEnabled: false
+            });
+            var parcels = new FeatureLayer({
+                portalItem: { id: CTX.parcels.portalItem }, layerId: CTX.parcels.sublayer,
+                title: "Parcels",
+                renderer: { type: "simple", symbol: { type: "simple-fill", color: [0,0,0,0], outline: { color: [0,0,0,0.08], width: 0.5 } } },
+                minScale: 18000, popupEnabled: false
+            });
+            var roads = new FeatureLayer({
+                url: CTX.roads, title: "Roads",
+                renderer: { type: "simple", symbol: { type: "simple-line", color: [0,0,0,0.12], width: 0.8 } },
+                labelingInfo: [{
+                    labelExpression: "[FULL_NAME]",
+                    symbol: { type: "text", color: [90,107,98,0.8], font: { size: 8, family: "DM Sans" }, haloColor: [250,248,244,0.9], haloSize: 1 },
+                    minScale: 8000, labelPlacement: "center-along"
+                }],
+                minScale: 24000, popupEnabled: false
+            });
+
+            var basins = new FeatureLayer({
+                url: DRAINAGE + "/3", title: "Drainage Basins", opacity: 0.25,
+                renderer: { type: "simple", symbol: { type: "simple-fill", color: [212,229,220,0.3], outline: { color: [58,138,92,0.3], width: 1 } } },
+                popupEnabled: false
+            });
+            var channels = new FeatureLayer({
+                url: DRAINAGE + "/2", title: "Drainage Channels",
+                renderer: { type: "simple", symbol: { type: "simple-line", color: [58,138,92,0.7], width: 2, style: "dash" } },
+                popupTemplate: { title: "Channel: {FeatureID}", content: [{ type: "fields", fieldInfos: [
+                    { fieldName: "FeatureID", label: "Feature ID" },
+                    { fieldName: "Condition", label: "Condition" },
+                ]}]}
+            });
+            var culverts = new FeatureLayer({
+                url: DRAINAGE + "/4", title: "Drainage Culverts",
+                renderer: {
+                    type: "unique-value", field: "Condition",
+                    defaultSymbol: { type: "simple-line", color: [138,148,142], width: 2 },
+                    defaultLabel: "Not assessed",
+                    uniqueValueInfos: [
+                        { value: "Good", label: "Good", symbol: { type: "simple-line", color: [58,138,92], width: 3 } },
+                        { value: "Fair", label: "Fair", symbol: { type: "simple-line", color: [196,134,11], width: 3 } },
+                        { value: "Poor", label: "Poor", symbol: { type: "simple-line", color: [192,57,43], width: 3 } }
+                    ]
+                },
+                popupTemplate: { title: "Culvert: {FeatureID}", content: [{ type: "fields", fieldInfos: [
+                    { fieldName: "FeatureType", label: "Type" },
+                    { fieldName: "Material", label: "Material" },
+                    { fieldName: "Width", label: "Diameter (in)" },
+                    { fieldName: "Condition", label: "Condition" },
+                    { fieldName: "LastInspectionDate", label: "Last Inspection", format: { dateFormat: "short-date" } }
+                ]}]}
+            });
+            var structures = new FeatureLayer({
+                url: DRAINAGE + "/1", title: "Drainage Structures",
+                renderer: {
+                    type: "unique-value", field: "FeatureType",
+                    defaultSymbol: { type: "simple-marker", color: [138,148,142], size: 6, outline: { width: 0 } },
+                    uniqueValueInfos: [
+                        { value: "Inlet",    symbol: { type: "simple-marker", color: [45,94,71],  size: 7, style: "circle", outline: { width: 0 } } },
+                        { value: "Outlet",   symbol: { type: "simple-marker", color: [45,94,71],  size: 7, style: "circle", outline: { width: 0 } } },
+                        { value: "Culvert",  symbol: { type: "simple-marker", color: [45,94,71],  size: 7, style: "diamond", outline: { width: 0 } } },
+                        { value: "Junction", symbol: { type: "simple-marker", color: [138,148,142], size: 6, style: "square", outline: { width: 0 } } }
+                    ]
+                },
+                popupTemplate: { title: "Structure: {FeatureID}", content: [{ type: "fields", fieldInfos: [
+                    { fieldName: "FeatureType", label: "Type" },
+                    { fieldName: "Condition", label: "Condition" }
+                ]}]}
+            });
+
+            map.addMany([jurisdictional, parcels, roads, basins, channels, culverts, structures]);
+
+            jurisdictional.when(function () { return jurisdictional.queryExtent(); }).then(function (r) {
+                if (r.extent) view.goTo(r.extent.expand(1.05));
+            });
+
+            /* ── Address Search (Parcels) ── */
+            var searchInput = document.getElementById("searchInput");
+            var searchResults = document.getElementById("searchResults");
+            var searchClear = document.getElementById("searchClear");
+            var debounce = null;
+
+            function highlight(val, query) {
+                if (!val) return "";
+                var s = String(val);
+                query.trim().split(/\s+/).forEach(function (kw) {
+                    var re = new RegExp("(" + kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + ")", "gi");
+                    s = s.replace(re, "<em>$1</em>");
+                });
+                return s;
+            }
+
+            async function doSearch(text) {
+                if (!text.trim()) {
+                    searchResults.classList.remove("visible");
+                    searchClear.classList.remove("visible");
+                    return;
+                }
+                searchClear.classList.add("visible");
+                searchResults.innerHTML = '<div class="sr-empty">Searching...</div>';
+                searchResults.classList.add("visible");
+
+                var escaped = text.trim().replace(/'/g, "''").toUpperCase();
+                var features = [];
+                try {
+                    var r = await parcels.queryFeatures({
+                        where: "UPPER(ADDRESS) LIKE '%" + escaped + "%'",
+                        outFields: ["ADDRESS", "OBJECTID"],
+                        returnGeometry: true,
+                        num: 15,
+                        orderByFields: ["ADDRESS ASC"]
+                    });
+                    features = r.features || [];
+                } catch (e) { features = []; }
+
+                if (!features.length) {
+                    searchResults.innerHTML = '<div class="sr-empty">No addresses found</div>';
+                    return;
+                }
+
+                var html = '<div class="sr-group"><span class="sr-group-dot" style="background:#1B3A2D"></span>Addresses<span class="sr-group-count">' + features.length + '</span></div>';
+                var cache = {};
+                features.forEach(function (f, i) {
+                    var addr = f.attributes.ADDRESS || "Unknown";
+                    var key = "addr-" + i;
+                    cache[key] = f;
+                    html += '<div class="sr-item" data-key="' + key + '"><div class="sr-title">' + highlight(addr, text) + '</div></div>';
+                });
+                searchResults.innerHTML = html;
+
+                searchResults.querySelectorAll(".sr-item").forEach(function (el) {
+                    el.addEventListener("click", function () {
+                        var f = cache[el.dataset.key];
+                        if (!f) return;
+                        var geom = f.geometry;
+                        var target = geom.extent ? geom.extent.expand(2) : geom;
+                        view.goTo({ target: target }).then(function () {
+                            view.popup.open({
+                                features: [f],
+                                location: geom.extent ? geom.extent.center : geom
+                            });
+                        });
+                        searchResults.classList.remove("visible");
+                    });
+                });
+            }
+
+            searchInput.addEventListener("input", function () {
+                clearTimeout(debounce);
+                debounce = setTimeout(function () { doSearch(searchInput.value); }, 300);
+            });
+            searchInput.addEventListener("keydown", function (e) {
+                if (e.key === "Escape") { searchInput.value = ""; doSearch(""); searchInput.blur(); }
+            });
+            searchClear.addEventListener("click", function () { searchInput.value = ""; doSearch(""); searchInput.focus(); });
+            document.addEventListener("click", function (e) {
+                if (!document.getElementById("searchWrap").contains(e.target)) searchResults.classList.remove("visible");
+            });
+        });
+    }
+
+    /* ── Init ── */
+    async function init() {
+        try {
+            var kpi = await loadKPIs();
+            await loadInspections(kpi.counts);
+            var cond = await loadCondition();
+            buildConditionChart(cond.byLayer);
+            buildMaterialChart(kpi.matStats);
+            initMap();
+            document.getElementById("headerUpdated").innerHTML = "Updated " +
+                new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+        } catch (e) { console.error("Dashboard error:", e); }
+        finally { document.getElementById("loading").classList.add("hidden"); }
+    }
+    init();
+})();
+</script>
+</body>
+</html>
