@@ -70,6 +70,7 @@ All queries target the **Public View** feature service. This is a hosted view la
 | Jurisdictional Boundary | `CTX.jurisdictional` | `.../FOR_Jurisdictional/FeatureServer` | Map extent initialization, boundary outline |
 | Parcels (Public View) | `CTX.parcels` | Portal Item `bd5079b30310433998c6a54652074dd6`, L0 | Address search, map context at 1:18k |
 | Roads (Public View) | `CTX.roads` | `.../CoFORPW_Road_Public/FeatureServer/0` | Map context with labels at 1:8k |
+| FEMA NFHL | `nfhl` | `https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer` (sublayer 28) | National Flood Hazard Layer zones at 35% opacity |
 
 ### Authentication Suppression
 
@@ -124,27 +125,33 @@ Aggregates `Condition` field values across L1, L2 and L4 using `groupByFieldsFor
 
 **Basemap:** `gray-vector` (Esri). Requires no API key for public use.
 
-**Extent initialization:** Uses `queryExtent()` on the Jurisdictional Boundary layer, then `view.goTo(extent.expand(1.05))`. This pattern is used instead of `fullExtent` because `fullExtent` fails on layers that are not yet visible at the initial scale.
+**Initial view:** The MapView is initialized with `center: [-98.69, 29.745], zoom: 13` (centered on Fair Oaks Ranch) so the map never starts at the world view. Once both the view and the Jurisdictional Boundary layer are ready, a `queryExtent()` + `view.goTo(extent.expand(1.05))` refines the extent to fit the city boundary precisely.
 
-**Layer draw order** (bottom to top): Jurisdictional Boundary → Parcels (1:18k) → Roads (1:24k, labels at 1:8k) → Drainage Basins → Channels → Culverts → Structures.
+**Layer draw order** (bottom to top): Jurisdictional Boundary → Parcels (1:18k) → Roads (1:24k, labels at 1:8k) → FEMA NFHL (35% opacity) → Drainage Basins → Channels → Culverts → Structures.
+
+**FEMA National Flood Hazard Layer:** Added as a `MapImageLayer` from `https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer` with sublayer 28 (S_Fld_Haz_Ar — flood zone polygons) visible. Rendered at 35% opacity so drainage features remain clearly visible on top. This is a public federal service requiring no authentication. FEMA uses its own symbology (blue shading for A/AE/AH zones, orange for X500, etc.). If the FEMA service is temporarily unavailable, the layer simply won't render — it does not block the rest of the dashboard.
 
 **Culvert symbology:** Unique-value renderer on `Condition` field. Good = green (`#3A8A5C`), Fair = amber (`#C4860B`), Poor = red (`#C0392B`), unassessed = gray (`#8A948E`).
 
 ### 6. Address Search
 
-The search bar queries the `ADDRESS` field on the public parcel layer (portal item `bd5079b30310433998c6a54652074dd6`, L0) using a case-insensitive LIKE query. Results are sorted alphabetically, limited to 15 matches. Clicking a result zooms to that parcel's extent and opens a popup.
+The search bar queries the parcel layer's address field using a direct REST POST to the resolved service URL, bypassing the ArcGIS JS SDK's `queryFeatures()` method entirely. This avoids the authentication conflict caused by the blanket `getCredential` rejection when the parcels layer is loaded via `portalItem`.
+
+**How field detection works:** On map load, the parcels FeatureLayer is loaded via `parcels.load()`. Once resolved, the code reads `parcels.url` and `parcels.fields` to:
+1. Construct the direct REST query URL (`{url}/{layerId}/query`)
+2. Auto-detect the address field by checking known candidates in order: `ADDRESS`, `SiteAddress`, `Site_Address`, `SITEADDRESS`, `StreetAddress`, `FULL_ADDRESS`, `PropAddr`
+3. Fall back to any string field containing "ADDR" in the name
+
+The detected field name is logged to the browser console (`"Parcel address field detected: ..."`) for verification.
 
 **If search returns no results for known addresses:**
-1. Verify the field name is `ADDRESS` (not `SiteAddress`, `Site_Address`, `SITEADDRESS`, etc.) by checking the parcel layer's REST endpoint: append `?f=json` to the FeatureServer URL and search the `fields` array
-2. Verify the parcel layer is shared publicly
-3. Verify the portal item ID (`bd5079b30310433998c6a54652074dd6`) is still correct — if the parcel view was recreated, the item ID changes
+1. Open the browser console and check for the detected field name log
+2. If you see `"No address field found on parcel layer"`, the field names don't match any candidate — the console will list all available field names so you can identify the correct one and add it to the `candidates` array
+3. If you see `"Parcels layer failed to load for search"`, the portal item may require authentication — verify it is shared publicly
+4. If the search runs but returns empty results, verify the address data is populated (not null) on the parcel features
+5. Verify the portal item ID (`bd5079b30310433998c6a54652074dd6`) is still correct
 
-**To change the address field name**, update these two locations in the `doSearch()` function:
-- The `where` clause: `"UPPER(ADDRESS) LIKE ..."`
-- The `outFields` array: `["ADDRESS", "OBJECTID"]`
-
-And update the result display line:
-- `f.attributes.ADDRESS`
+**Search results behavior:** Results return as raw GeoJSON from the REST endpoint (not SDK Graphic objects). Click-to-zoom calculates the polygon centroid from ring coordinates and navigates to zoom level 18 with a popup showing the address.
 
 ---
 
