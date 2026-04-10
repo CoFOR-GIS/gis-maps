@@ -584,6 +584,10 @@
         <div id="mapView"></div>
         <div class="map-legend-bar">
             <div class="legend-group">
+                <span class="legend-group-label">Flood zones</span>
+                <span class="lg-swatch" style="background:rgba(0,112,255,0.35);"></span> FEMA NFHL
+            </div>
+            <div class="legend-group">
                 <span class="legend-group-label">Culvert condition</span>
                 <span class="lg-swatch" style="background:#3A8A5C;"></span> Good
                 <span class="lg-swatch" style="background:#C4860B;"></span> Fair
@@ -809,14 +813,15 @@
     function initMap() {
         require([
             "esri/Map", "esri/views/MapView", "esri/layers/FeatureLayer",
-            "esri/identity/IdentityManager"
-        ], function (Map, MapView, FeatureLayer, esriId) {
+            "esri/layers/MapImageLayer", "esri/identity/IdentityManager"
+        ], function (Map, MapView, FeatureLayer, MapImageLayer, esriId) {
 
             esriId.getCredential = function () { return Promise.reject(new Error("Auth suppressed")); };
 
             var map = new Map({ basemap: "gray-vector" });
             var view = new MapView({
                 container: "mapView", map: map,
+                center: [-98.69, 29.745], zoom: 13,
                 ui: { components: ["zoom", "attribution"] },
                 popup: { dockOptions: { buttonEnabled: false, position: "bottom-right" } }
             });
@@ -841,6 +846,14 @@
                     minScale: 8000, labelPlacement: "center-along"
                 }],
                 minScale: 24000, popupEnabled: false
+            });
+
+            var nfhl = new MapImageLayer({
+                url: "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer",
+                title: "FEMA Flood Hazard Zones",
+                opacity: 0.35,
+                sublayers: [{ id: 28, visible: true }],
+                listMode: "show"
             });
 
             var basins = new FeatureLayer({
@@ -894,17 +907,59 @@
                 ]}]}
             });
 
-            map.addMany([jurisdictional, parcels, roads, basins, channels, culverts, structures]);
+            map.addMany([jurisdictional, parcels, roads, nfhl, basins, channels, culverts, structures]);
 
-            jurisdictional.when(function () { return jurisdictional.queryExtent(); }).then(function (r) {
-                if (r.extent) view.goTo(r.extent.expand(1.05));
+            /* Force zoom to jurisdictional boundary once both view and layer are ready */
+            Promise.all([view.when(), jurisdictional.when()]).then(function () {
+                return jurisdictional.queryExtent();
+            }).then(function (r) {
+                if (r.extent) view.goTo(r.extent.expand(1.05), { duration: 800 });
+            }).catch(function (e) {
+                console.warn("Could not zoom to jurisdictional extent:", e);
             });
 
-            /* ── Address Search (Parcels) ── */
+            /* ── Address Search (Parcels via REST) ── */
             var searchInput = document.getElementById("searchInput");
             var searchResults = document.getElementById("searchResults");
             var searchClear = document.getElementById("searchClear");
             var debounce = null;
+            var parcelQueryUrl = null;
+            var addrField = null;
+
+            /* Resolve parcels URL and auto-detect address field */
+            parcels.load().then(function () {
+                parcelQueryUrl = parcels.url + "/" + (parcels.layerId || 0) + "/query";
+                var fields = parcels.fields || [];
+                /* Try known field name candidates in priority order */
+                var candidates = ["ADDRESS", "SiteAddress", "Site_Address", "SITEADDRESS", "StreetAddress", "FULL_ADDRESS", "PropAddr"];
+                for (var c = 0; c < candidates.length; c++) {
+                    for (var f = 0; f < fields.length; f++) {
+                        if (fields[f].name.toUpperCase() === candidates[c].toUpperCase()) {
+                            addrField = fields[f].name;
+                            break;
+                        }
+                    }
+                    if (addrField) break;
+                }
+                /* Fallback: find any field with "addr" in the name */
+                if (!addrField) {
+                    for (var f = 0; f < fields.length; f++) {
+                        if (fields[f].name.toUpperCase().indexOf("ADDR") > -1 && fields[f].type === "string") {
+                            addrField = fields[f].name;
+                            break;
+                        }
+                    }
+                }
+                if (addrField) {
+                    console.log("Parcel address field detected:", addrField);
+                } else {
+                    console.warn("No address field found on parcel layer. Available fields:", fields.map(function(f){ return f.name; }));
+                    searchInput.placeholder = "Address search unavailable";
+                }
+            }).catch(function (e) {
+                console.warn("Parcels layer failed to load for search:", e);
+                searchInput.placeholder = "Address search unavailable";
+            });
 
             function highlight(val, query) {
                 if (!val) return "";
@@ -922,22 +977,40 @@
                     searchClear.classList.remove("visible");
                     return;
                 }
+                if (!parcelQueryUrl || !addrField) {
+                    searchResults.innerHTML = '<div class="sr-empty">Address search is not available — parcel layer could not be loaded</div>';
+                    searchResults.classList.add("visible");
+                    searchClear.classList.add("visible");
+                    return;
+                }
                 searchClear.classList.add("visible");
                 searchResults.innerHTML = '<div class="sr-empty">Searching...</div>';
                 searchResults.classList.add("visible");
 
                 var escaped = text.trim().replace(/'/g, "''").toUpperCase();
+                var body = new URLSearchParams({
+                    where: "UPPER(" + addrField + ") LIKE '%" + escaped + "%'",
+                    outFields: addrField + ",OBJECTID",
+                    returnGeometry: "true",
+                    resultRecordCount: "15",
+                    orderByFields: addrField + " ASC",
+                    outSR: "4326",
+                    f: "json"
+                });
+
                 var features = [];
                 try {
-                    var r = await parcels.queryFeatures({
-                        where: "UPPER(ADDRESS) LIKE '%" + escaped + "%'",
-                        outFields: ["ADDRESS", "OBJECTID"],
-                        returnGeometry: true,
-                        num: 15,
-                        orderByFields: ["ADDRESS ASC"]
+                    var resp = await fetch(parcelQueryUrl, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                        body: body
                     });
-                    features = r.features || [];
-                } catch (e) { features = []; }
+                    var data = await resp.json();
+                    features = data.features || [];
+                } catch (e) {
+                    console.warn("Parcel search failed:", e);
+                    features = [];
+                }
 
                 if (!features.length) {
                     searchResults.innerHTML = '<div class="sr-empty">No addresses found</div>';
@@ -947,7 +1020,7 @@
                 var html = '<div class="sr-group"><span class="sr-group-dot" style="background:#1B3A2D"></span>Addresses<span class="sr-group-count">' + features.length + '</span></div>';
                 var cache = {};
                 features.forEach(function (f, i) {
-                    var addr = f.attributes.ADDRESS || "Unknown";
+                    var addr = f.attributes[addrField] || "Unknown";
                     var key = "addr-" + i;
                     cache[key] = f;
                     html += '<div class="sr-item" data-key="' + key + '"><div class="sr-title">' + highlight(addr, text) + '</div></div>';
@@ -958,14 +1031,21 @@
                     el.addEventListener("click", function () {
                         var f = cache[el.dataset.key];
                         if (!f) return;
-                        var geom = f.geometry;
-                        var target = geom.extent ? geom.extent.expand(2) : geom;
-                        view.goTo({ target: target }).then(function () {
-                            view.popup.open({
-                                features: [f],
-                                location: geom.extent ? geom.extent.center : geom
+                        var rings = f.geometry && f.geometry.rings;
+                        if (rings && rings.length) {
+                            /* Calculate centroid from polygon rings */
+                            var pts = rings[0];
+                            var cx = 0, cy = 0;
+                            for (var p = 0; p < pts.length; p++) { cx += pts[p][0]; cy += pts[p][1]; }
+                            cx /= pts.length; cy /= pts.length;
+                            view.goTo({ center: [cx, cy], zoom: 18 }, { duration: 600 }).then(function () {
+                                view.popup.open({
+                                    title: f.attributes[addrField],
+                                    location: { type: "point", longitude: cx, latitude: cy },
+                                    content: "<div style='font-size:13px;color:#5A6B62;'>Parcel address</div>"
+                                });
                             });
-                        });
+                        }
                         searchResults.classList.remove("visible");
                     });
                 });
