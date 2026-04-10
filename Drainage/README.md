@@ -135,23 +135,21 @@ Aggregates `Condition` field values across L1, L2 and L4 using `groupByFieldsFor
 
 ### 6. Address Search
 
-The search bar queries the parcel layer's address field using a direct REST POST to the resolved service URL, bypassing the ArcGIS JS SDK's `queryFeatures()` method entirely. This avoids the authentication conflict caused by the blanket `getCredential` rejection when the parcels layer is loaded via `portalItem`.
+The search bar queries the `ADDRESS` field on the **authoritative ParcelStatus** feature service via a direct REST `fetch()` POST to a hardcoded URL (`CTX.parcelsQuery`). This is completely decoupled from the ArcGIS JS SDK — no `queryFeatures()`, no `parcels.load()`, no portal item resolution, no SDK auth pipeline involvement whatsoever.
 
-**How field detection works:** On map load, the parcels FeatureLayer is loaded via `parcels.load()`. Once resolved, the code reads `parcels.url` and `parcels.fields` to:
-1. Construct the direct REST query URL (`{url}/{layerId}/query`)
-2. Auto-detect the address field by checking known candidates in order: `ADDRESS`, `SiteAddress`, `Site_Address`, `SITEADDRESS`, `StreetAddress`, `FULL_ADDRESS`, `PropAddr`
-3. Fall back to any string field containing "ADDR" in the name
+**Why hardcoded?** Three previous approaches were attempted and all failed:
+1. SDK `parcels.queryFeatures()` — killed by the blanket `getCredential` rejection before the portal-loaded layer could resolve
+2. SDK `parcels.load()` + direct fetch — same portal resolution failure
+3. Portal REST API (`/sharing/rest/content/items/{id}`) — also blocked by org-level auth
 
-The detected field name is logged to the browser console (`"Parcel address field detected: ..."`) for verification.
+The hardcoded URL (`https://services6.arcgis.com/Cnwpb7mZuifVHE6A/arcgis/rest/services/ParcelStatus/FeatureServer/0/query`) works because it targets the authoritative service directly, which is publicly accessible without any portal or SDK mediation. The field name `ADDRESS` is confirmed from the ParcelStatus layer schema (verified via the parcel view layer creation script and the Parcel Editor app).
 
 **If search returns no results for known addresses:**
-1. Open the browser console and check for the detected field name log
-2. If you see `"No address field found on parcel layer"`, the field names don't match any candidate — the console will list all available field names so you can identify the correct one and add it to the `candidates` array
-3. If you see `"Parcels layer failed to load for search"`, the portal item may require authentication — verify it is shared publicly
-4. If the search runs but returns empty results, verify the address data is populated (not null) on the parcel features
-5. Verify the portal item ID (`bd5079b30310433998c6a54652074dd6`) is still correct
+1. Open the browser console and run the diagnostic fetch provided in the Troubleshooting section below
+2. If the service returns a 403 or login redirect, ParcelStatus is not shared publicly — share it with Everyone or switch `CTX.parcelsQuery` to the public view URL
+3. If the service returns features but the field is named differently, update three locations in `doSearch()`: the `where` clause, `outFields`, and `f.attributes.ADDRESS`
 
-**Search results behavior:** Results return as raw GeoJSON from the REST endpoint (not SDK Graphic objects). Click-to-zoom calculates the polygon centroid from ring coordinates and navigates to zoom level 18 with a popup showing the address.
+**Search results behavior:** Results return as raw JSON from the REST endpoint (not SDK Graphic objects). Click-to-zoom calculates the polygon centroid from ring coordinates and navigates to zoom level 18 with a popup showing the address.
 
 ---
 
@@ -223,6 +221,23 @@ The `getCredential` rejection only suppresses SDK-initiated prompts. If a layer'
 
 Chart.js AMD conflict. Verify the `<script>` tag for Chart.js appears **before** the ArcGIS SDK tag in `<head>`. If they are swapped, Chart.js will fail to register and the `Chart` constructor will be undefined.
 
+### Address search shows no results
+
+The search queries `CTX.parcelsQuery` (hardcoded to ParcelStatus authoritative service). To diagnose, paste this into the browser console:
+
+```javascript
+fetch("https://services6.arcgis.com/Cnwpb7mZuifVHE6A/arcgis/rest/services/ParcelStatus/FeatureServer/0/query", {
+  method: "POST", headers: {"Content-Type":"application/x-www-form-urlencoded"},
+  body: new URLSearchParams({where:"ADDRESS LIKE '%FAIR%'", outFields:"ADDRESS", resultRecordCount:"3", f:"json"})
+}).then(r=>r.json()).then(d=>console.log(d));
+```
+
+Possible outcomes:
+1. **Returns features array** — search is working, the query term isn't matching data. Try searching just a house number.
+2. **Returns `{"error":{"code":403,...}}`** — ParcelStatus is not shared publicly. Either share it with Everyone or change `CTX.parcelsQuery` to the public parcels view URL.
+3. **Returns `{"error":{"code":400,"message":"Invalid field: ADDRESS"}}`** — the field is named differently. Append `?f=json` to the FeatureServer URL, find the correct field name in the `fields` array, and update three places in `doSearch()`.
+4. **Network error / CORS** — the service host is unreachable from the client browser.
+
 ### Condition counts don't match AGOL
 
 The dashboard aggregates condition values using exact string matching (`"Good"`, `"Fair"`, `"Poor"`). Values like `"good"` (lowercase), `"GOOD"` (uppercase), null, empty string, or any other variant will fall into the unrecognized bucket and be excluded from the condition pills. Standardize the Condition domain values on the authoritative layer to use title case.
@@ -277,7 +292,7 @@ Before this dashboard will function correctly, the following must be complete:
 - [ ] `LastInspectionDate` field visible on all Public View sublayers (L1, L2, L4)
 - [ ] `Created_User` and `Cost_Code` hidden on L4 in Public View per governance standards
 - [ ] All consumed portal items and services shared publicly (Everyone)
-- [ ] `index.html` copied to `gis.local/Drainage/` on IIS server
+- [ ] `index.html` and `logo.svg` copied to `gis.local/Drainage/` on IIS server
 - [ ] Legacy `CoFORPW_Drainage_Culvert_Inventory` renamed to include "(Legacy)" in title
 
 ---
@@ -286,5 +301,10 @@ Before this dashboard will function correctly, the following must be complete:
 
 | File | Purpose |
 |------|---------|
-| `index.html` | Complete dashboard application (single file, ~1,020 lines) |
+| `index.html` | Complete dashboard application (single file) |
+| `logo.svg` | City logo — used as favicon and referenced by `<link rel="icon">` |
 | `README.md` | This technical reference |
+
+### Favicon
+
+The favicon uses `<link rel="icon" href="logo.svg" type="image/svg+xml">`, referencing the same `logo.svg` file used across other CoFOR apps (WaterMeterEditor, ParcelEditor, etc.). Copy the `logo.svg` from any existing app deployment folder into `gis.local/Drainage/` alongside `index.html`. This is the standard pattern for all CoFOR HTML deployments.
