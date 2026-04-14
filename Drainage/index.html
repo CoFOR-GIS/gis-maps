@@ -327,8 +327,29 @@
             font-weight: 600;
             color: var(--text);
         }
-        .map-search-bar {
+        .map-fs-btn {
             margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            background: var(--bg-muted);
+            border: 1px solid var(--border);
+            border-radius: 5px;
+            padding: 5px 10px;
+            font-family: var(--font-body);
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .map-fs-btn:hover { background: var(--accent-wash); border-color: var(--accent-border); }
+        .map-fs-btn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+        .map-section.fullscreen { position: fixed; inset: 0; z-index: 100; border-radius: 0; border: none; display: flex; flex-direction: column; }
+        .map-section.fullscreen .map-header { flex-shrink: 0; }
+        .map-section.fullscreen #mapView { height: auto; flex: 1; }
+        .map-section.fullscreen .map-legend-bar { flex-shrink: 0; }
+        .map-search-bar {
             display: flex;
             align-items: center;
             background: var(--bg-muted);
@@ -573,6 +594,11 @@
     <div class="map-section">
         <div class="map-header">
             <div class="map-header-title">Infrastructure Map</div>
+            <button class="map-fs-btn" id="mapFsBtn" title="Toggle full page map">
+                <svg id="fsIconExpand" viewBox="0 0 16 16"><path d="M1 6V1h5M10 1h5v5M15 10v5h-5M6 15H1v-5"/></svg>
+                <svg id="fsIconCollapse" viewBox="0 0 16 16" style="display:none"><path d="M6 1v5H1M10 6h5V1M15 10h-5v5M1 15h5v-5"/></svg>
+                <span id="fsLabel">Full Page</span>
+            </button>
             <div class="map-search-bar" id="searchWrap">
                 <span class="map-search-icon">&#128269;</span>
                 <input class="map-search-input" id="searchInput" type="text"
@@ -1026,6 +1052,26 @@
             searchClear.addEventListener("click", function () { searchInput.value = ""; doSearch(""); searchInput.focus(); });
             document.addEventListener("click", function (e) {
                 if (!document.getElementById("searchWrap").contains(e.target)) searchResults.classList.remove("visible");
+            });
+
+            /* ── Full-page map toggle ── */
+            var mapSection = document.querySelector(".map-section");
+            var fsBtn = document.getElementById("mapFsBtn");
+            var fsLabel = document.getElementById("fsLabel");
+            var fsExpand = document.getElementById("fsIconExpand");
+            var fsCollapse = document.getElementById("fsIconCollapse");
+
+            fsBtn.addEventListener("click", function () {
+                var entering = !mapSection.classList.contains("fullscreen");
+                mapSection.classList.toggle("fullscreen");
+                fsExpand.style.display = entering ? "none" : "";
+                fsCollapse.style.display = entering ? "" : "none";
+                fsLabel.textContent = entering ? "Exit" : "Full Page";
+                document.body.style.overflow = entering ? "hidden" : "";
+                setTimeout(function () { view.resize(); }, 50);
+            });
+            document.addEventListener("keydown", function (e) {
+                if (e.key === "Escape" && mapSection.classList.contains("fullscreen")) fsBtn.click();
             });
         });
     }
