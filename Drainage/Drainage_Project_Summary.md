@@ -1,7 +1,7 @@
 # Drainage Infrastructure — Project Summary
 
 **Date:** April 10, 2026
-**Author:** Ernie Martinez, GIS Administrator
+**Author:** Ernie Martz, GIS Administrator
 **Status:** In Progress
 
 ---
@@ -75,7 +75,7 @@ A public-facing single-page dashboard was built for deployment at `gis.local/Dra
 2. **Inspection status** (2 cards) — Animated SVG progress ring showing % inspected across all layers, per-layer horizontal breakdown bars with color coding (red <25%, amber 25–59%, green ≥60%). Based on `LastInspectionDate IS NOT NULL` count
 3. **Condition overview** (3 pills) — Good/Fair/Poor with count and percentage, aggregated across L1, L2, L4
 4. **Charts** (2 cards) — Stacked bar (condition by asset type), horizontal bar (culvert material distribution)
-5. **Map** — gray-vector basemap, FEMA NFHL flood zones at 35% opacity (MapImageLayer sublayer 28), condition-coded culvert symbology, structure type symbology, dashed channel lines, context layers (jurisdictional boundary, parcels at 1:18k, roads with labels at 1:8k)
+5. **Map** — gray-vector basemap, FEMA NFHL flood zones at 35% opacity (MapImageLayer sublayer 28), condition-coded culvert symbology, structure type symbology, dashed channel lines, context layers (jurisdictional boundary, parcels at 1:18k, roads with labels at 1:8k). Full page toggle button in the map header expands the map to fill the viewport (Escape to exit).
 6. **Address search** — Queries `ADDRESS` field on Parcels_View public view service via direct REST fetch, click-to-zoom to parcel centroid with popup
 
 **Design decisions:**
