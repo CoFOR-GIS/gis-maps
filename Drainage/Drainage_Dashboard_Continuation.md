@@ -17,7 +17,7 @@ The dashboard is a single `index.html` file (no build process) that provides a p
 2. **Inspection Status** — SVG progress ring showing % inspected (based on `LastInspectionDate IS NOT NULL`), per-layer breakdown bars (Culverts, Structures, Channels)
 3. **Condition Overview** — Three color-coded pills (Good/Fair/Poor) with counts and percentages aggregated across all layers
 4. **Charts** — Stacked bar for condition by asset type, horizontal bar for culvert material distribution (both Chart.js 4.4.7)
-5. **Map** — ArcGIS JS SDK 4.31, gray-vector basemap, centered on Fair Oaks Ranch (`[-98.69, 29.745]` zoom 13), auto-refines to jurisdictional boundary extent. Includes FEMA NFHL flood zones at 35% opacity (MapImageLayer, sublayer 28). Culverts color-coded by condition, structures by type, channels as dashed lines.
+5. **Map** — ArcGIS JS SDK 4.31, gray-vector basemap, centered on Fair Oaks Ranch (`[-98.69, 29.745]` zoom 13), auto-refines to jurisdictional boundary extent. Includes FEMA NFHL flood zones at 35% opacity (MapImageLayer, sublayer 28). Culverts color-coded by condition, structures by type, channels as dashed lines. Full page toggle button expands the map to fill the viewport (Escape to exit).
 6. **Address Search** — Queries `ADDRESS` field on the Parcels_View public view service via hardcoded REST `fetch()` POST to `CTX.parcelsQuery`. Completely decoupled from the ArcGIS SDK auth pipeline — no portal item resolution, no SDK queryFeatures, just a plain fetch to the known public service URL.
 
 ### Technical Architecture
@@ -54,8 +54,8 @@ All services under `https://services6.arcgis.com/Cnwpb7mZuifVHE6A/ArcGIS/rest/se
 | `loadCondition()` | Groups Condition field across L1/L2/L4 → pills + returns `{ byLayer, combined }` |
 | `buildConditionChart(byLayer)` | Chart.js stacked bar |
 | `buildMaterialChart(ms)` | Chart.js horizontal bar |
-| `initMap()` | ArcGIS require block — map, layers, search, zoom |
-| `doSearch(text)` | Direct REST fetch to ParcelStatus for address search |
+| `initMap()` | ArcGIS require block — map, layers, search, zoom, full page toggle |
+| `doSearch(text)` | Direct REST fetch to Parcels_View for address search |
 | `init()` | Orchestrates load: KPIs → inspections → condition → charts → map |
 
 ### Known Issues & Gotchas
