@@ -133,6 +133,8 @@ Aggregates `Condition` field values across L1, L2 and L4 using `groupByFieldsFor
 
 **Culvert symbology:** Unique-value renderer on `Condition` field. Good = green (`#3A8A5C`), Fair = amber (`#C4860B`), Poor = red (`#C0392B`), unassessed = gray (`#8A948E`).
 
+**Full page mode:** A toggle button in the map header bar allows expanding the map to fill the entire browser viewport. The button applies `position: fixed; inset: 0` to `.map-section` and switches the map container from a fixed 480px height to `flex: 1`. Pressing Escape or clicking the button again exits full page mode. The SDK `view.resize()` is called after toggling to recalculate the canvas dimensions. `body.overflow` is set to `hidden` while in full page mode to prevent background scrolling.
+
 ### 6. Address Search
 
 The search bar queries the `ADDRESS` field on the **Parcels_View** public view feature service via a direct REST `fetch()` POST to a hardcoded URL (`CTX.parcelsQuery`). This is completely decoupled from the ArcGIS JS SDK — no `queryFeatures()`, no `parcels.load()`, no portal item resolution, no SDK auth pipeline involvement whatsoever.
