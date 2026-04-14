@@ -135,18 +135,18 @@ Aggregates `Condition` field values across L1, L2 and L4 using `groupByFieldsFor
 
 ### 6. Address Search
 
-The search bar queries the `ADDRESS` field on the **authoritative ParcelStatus** feature service via a direct REST `fetch()` POST to a hardcoded URL (`CTX.parcelsQuery`). This is completely decoupled from the ArcGIS JS SDK — no `queryFeatures()`, no `parcels.load()`, no portal item resolution, no SDK auth pipeline involvement whatsoever.
+The search bar queries the `ADDRESS` field on the **Parcels_View** public view feature service via a direct REST `fetch()` POST to a hardcoded URL (`CTX.parcelsQuery`). This is completely decoupled from the ArcGIS JS SDK — no `queryFeatures()`, no `parcels.load()`, no portal item resolution, no SDK auth pipeline involvement whatsoever.
 
 **Why hardcoded?** Three previous approaches were attempted and all failed:
 1. SDK `parcels.queryFeatures()` — killed by the blanket `getCredential` rejection before the portal-loaded layer could resolve
 2. SDK `parcels.load()` + direct fetch — same portal resolution failure
 3. Portal REST API (`/sharing/rest/content/items/{id}`) — also blocked by org-level auth
 
-The hardcoded URL (`https://services6.arcgis.com/Cnwpb7mZuifVHE6A/arcgis/rest/services/ParcelStatus/FeatureServer/0/query`) works because it targets the authoritative service directly, which is publicly accessible without any portal or SDK mediation. The field name `ADDRESS` is confirmed from the ParcelStatus layer schema (verified via the parcel view layer creation script and the Parcel Editor app).
+The hardcoded URL (`https://services6.arcgis.com/Cnwpb7mZuifVHE6A/arcgis/rest/services/Parcels_View/FeatureServer/0/query`) works because it targets the public view service directly, which is accessible without any portal or SDK mediation. The field name `ADDRESS` is confirmed from the Parcels_View layer schema.
 
 **If search returns no results for known addresses:**
 1. Open the browser console and run the diagnostic fetch provided in the Troubleshooting section below
-2. If the service returns a 403 or login redirect, ParcelStatus is not shared publicly — share it with Everyone or switch `CTX.parcelsQuery` to the public view URL
+2. If the service returns a 403 or login redirect, the Parcels_View may not be shared publicly — verify sharing is set to Everyone
 3. If the service returns features but the field is named differently, update three locations in `doSearch()`: the `where` clause, `outFields`, and `f.attributes.ADDRESS`
 
 **Search results behavior:** Results return as raw JSON from the REST endpoint (not SDK Graphic objects). Click-to-zoom calculates the polygon centroid from ring coordinates and navigates to zoom level 18 with a popup showing the address.
@@ -223,10 +223,10 @@ Chart.js AMD conflict. Verify the `<script>` tag for Chart.js appears **before**
 
 ### Address search shows no results
 
-The search queries `CTX.parcelsQuery` (hardcoded to ParcelStatus authoritative service). To diagnose, paste this into the browser console:
+The search queries `CTX.parcelsQuery` (hardcoded to the Parcels_View public view service). To diagnose, paste this into the browser console:
 
 ```javascript
-fetch("https://services6.arcgis.com/Cnwpb7mZuifVHE6A/arcgis/rest/services/ParcelStatus/FeatureServer/0/query", {
+fetch("https://services6.arcgis.com/Cnwpb7mZuifVHE6A/arcgis/rest/services/Parcels_View/FeatureServer/0/query", {
   method: "POST", headers: {"Content-Type":"application/x-www-form-urlencoded"},
   body: new URLSearchParams({where:"ADDRESS LIKE '%FAIR%'", outFields:"ADDRESS", resultRecordCount:"3", f:"json"})
 }).then(r=>r.json()).then(d=>console.log(d));
@@ -234,9 +234,13 @@ fetch("https://services6.arcgis.com/Cnwpb7mZuifVHE6A/arcgis/rest/services/Parcel
 
 Possible outcomes:
 1. **Returns features array** — search is working, the query term isn't matching data. Try searching just a house number.
-2. **Returns `{"error":{"code":403,...}}`** — ParcelStatus is not shared publicly. Either share it with Everyone or change `CTX.parcelsQuery` to the public parcels view URL.
+2. **Returns `{"error":{"code":403,...}}`** — Parcels_View is not shared publicly. Share it with Everyone in AGOL.
 3. **Returns `{"error":{"code":400,"message":"Invalid field: ADDRESS"}}`** — the field is named differently. Append `?f=json` to the FeatureServer URL, find the correct field name in the `fields` array, and update three places in `doSearch()`.
 4. **Network error / CORS** — the service host is unreachable from the client browser.
+
+### Address search dropdown doesn't appear
+
+If the REST query returns valid features (verified in the console) but the dropdown never becomes visible, check that `.map-search-bar` does **not** have `overflow: hidden` in its CSS. The results container (`.map-search-results`) is absolutely positioned below the search bar at `top: 100%`, so `overflow: hidden` on the parent will clip it entirely. The search bar should not use `overflow: hidden`.
 
 ### Condition counts don't match AGOL
 
