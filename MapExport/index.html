@@ -1,0 +1,3261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>City of Fair Oaks Ranch — Map Export Tool</title>
+
+<!-- Favicon (local SVG in same folder) -->
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="alternate icon" href="logo.svg">
+
+<!-- Google Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- 1. jsPDF FIRST (before ArcGIS to avoid AMD define() conflict) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<!-- 2. Shepherd.js (guided tour) — MUST load before ArcGIS to avoid AMD define() conflict -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/shepherd.js@11.2.0/dist/css/shepherd.css">
+<script src="https://cdn.jsdelivr.net/npm/shepherd.js@11.2.0/dist/js/shepherd.min.js"></script>
+
+<!-- 3. ArcGIS JS SDK 4.31 (loads LAST; its Dojo AMD loader would otherwise capture any UMD scripts loaded after it) -->
+<link rel="stylesheet" href="https://js.arcgis.com/4.31/esri/themes/light/main.css">
+<script src="https://js.arcgis.com/4.31/"></script>
+
+<style>
+  /* ══════════════════════ CSS VARIABLES ══════════════════════ */
+  :root {
+    --forest:        #1B3A2D;
+    --forest-light:  #2A5440;
+    --forest-pale:   #3A6B54;
+    --gold:          #C8A94E;
+    --gold-light:    #DBBF6A;
+    --gold-warm:     #E8D18E;
+    --cream:         #FAF6EE;
+    --cream-dark:    #F0EADB;
+    --stone:         #8B8573;
+    --bark:          #5C4F3C;
+    --text-dark:     #2A2A25;
+    --text-mid:      #5C5C52;
+    --text-light:    #8B8B80;
+    --white:         #FFFFFF;
+    --danger:        #B5432A;
+    --panel-width:   350px;
+    --header-height: 56px;
+    --radius:        8px;
+    --radius-sm:     5px;
+    --shadow:        0 2px 12px rgba(27,58,45,0.12);
+    --transition:    0.25s cubic-bezier(0.4,0,0.2,1);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  body { font-family: 'DM Sans', system-ui, sans-serif; color: var(--text-dark); background: var(--cream); }
+
+  /* ══════════════════════ HEADER ══════════════════════ */
+  .app-header {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    height: var(--header-height);
+    background: var(--forest);
+    display: flex; align-items: center; gap: 14px;
+    padding: 0 20px;
+    box-shadow: 0 2px 16px rgba(0,0,0,0.25);
+  }
+
+  .app-header .logo-mark {
+    height: 36px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0; overflow: hidden;
+    background: var(--gold);        /* gold bg for fallback initials only */
+    border-radius: 4px;
+    padding: 2px 4px;
+  }
+
+  /* When logo.svg is present, clear all background/padding */
+  .app-header .logo-mark.has-logo {
+    background: transparent;
+    border-radius: 0;
+    padding: 0;
+  }
+
+  .app-header .logo-mark img { height: 100%; width: auto; object-fit: contain; }
+  .app-header .logo-mark .logo-fallback {
+    font-family: 'Playfair Display', serif;
+    font-weight: 700; font-size: 12px;
+    color: var(--forest); line-height: 1;
+  }
+
+  .app-header h1 {
+    font-family: 'Playfair Display', serif;
+    font-weight: 600; font-size: 17px;
+    color: var(--cream); letter-spacing: 0.3px; white-space: nowrap;
+  }
+  .app-header h1 span { color: var(--gold-light); font-weight: 500; }
+
+  .header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .coord-badge {
+    font-size: 10.5px; color: var(--gold-warm);
+    background: rgba(255,255,255,0.08);
+    padding: 4px 10px; border-radius: 20px;
+    font-weight: 500; letter-spacing: 0.3px;
+  }
+
+  /* ══════════════════════ LAYOUT ══════════════════════ */
+  .app-shell { display: flex; height: calc(100vh - var(--header-height)); margin-top: var(--header-height); }
+
+  .side-panel {
+    width: var(--panel-width); background: var(--white);
+    border-right: 1px solid var(--cream-dark);
+    display: flex; flex-direction: column;
+    overflow-y: auto; overflow-x: hidden; flex-shrink: 0;
+    box-shadow: 2px 0 20px rgba(27,58,45,0.06);
+  }
+  .side-panel::-webkit-scrollbar { width: 5px; }
+  .side-panel::-webkit-scrollbar-track { background: transparent; }
+  .side-panel::-webkit-scrollbar-thumb { background: var(--cream-dark); border-radius: 10px; }
+
+  .panel-section { padding: 18px 20px; border-bottom: 1px solid var(--cream-dark); }
+  .panel-section:last-child { border-bottom: none; }
+
+  .section-label {
+    font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 1.5px;
+    color: var(--stone); margin-bottom: 12px;
+  }
+
+  /* Mode Toggle */
+  .mode-toggle { display: flex; background: var(--cream); border-radius: var(--radius); padding: 3px; gap: 3px; }
+  .mode-btn {
+    flex: 1; padding: 9px 0; border: none; background: transparent;
+    border-radius: var(--radius-sm); font-family: 'DM Sans', sans-serif;
+    font-size: 13px; font-weight: 600; color: var(--text-mid);
+    cursor: pointer; transition: all var(--transition);
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+  .mode-btn.active { background: var(--forest); color: var(--white); box-shadow: 0 2px 8px rgba(27,58,45,0.2); }
+  .mode-btn svg { width: 15px; height: 15px; }
+
+  /* Form Controls */
+  .form-group { margin-bottom: 14px; }
+  .form-group:last-child { margin-bottom: 0; }
+  .form-label { display: block; font-size: 12px; font-weight: 600; color: var(--text-dark); margin-bottom: 6px; }
+
+  .form-select, .form-input {
+    width: 100%; padding: 9px 12px;
+    border: 1.5px solid var(--cream-dark); border-radius: var(--radius-sm);
+    font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--text-dark);
+    background: var(--white); transition: border-color var(--transition); outline: none;
+  }
+  .form-select:focus, .form-input:focus { border-color: var(--forest-pale); }
+  .form-select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238B8573' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px;
+  }
+
+  /* Zoom Input Row */
+  .zoom-row {
+    display: flex; align-items: center; gap: 6px;
+  }
+  .zoom-row .form-input {
+    width: 64px; text-align: center; padding: 7px 4px;
+    font-size: 14px; font-weight: 600;
+    -moz-appearance: textfield;
+  }
+  .zoom-row .form-input::-webkit-inner-spin-button,
+  .zoom-row .form-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .zoom-btn {
+    width: 32px; height: 32px; border: 1.5px solid var(--cream-dark);
+    background: var(--white); border-radius: var(--radius-sm);
+    font-size: 18px; font-weight: 600; color: var(--forest);
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: all var(--transition); line-height: 1;
+  }
+  .zoom-btn:hover { background: rgba(27,58,45,0.04); border-color: var(--forest); }
+  .zoom-current { font-size: 11px; color: var(--text-light); margin-left: 4px; white-space: nowrap; }
+
+  /* Orientation Buttons */
+  .orient-group { display: flex; gap: 6px; }
+  .orient-btn {
+    flex: 1; padding: 8px 0; border: 1.5px solid var(--cream-dark);
+    background: var(--white); border-radius: var(--radius-sm);
+    font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 500;
+    color: var(--text-mid); cursor: pointer; transition: all var(--transition);
+    display: flex; align-items: center; justify-content: center; gap: 5px;
+  }
+  .orient-btn.active { border-color: var(--forest); color: var(--forest); background: rgba(27,58,45,0.04); }
+  .orient-btn svg { width: 14px; height: 14px; }
+
+  /* Layer / Label Toggles */
+  .layer-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; }
+  .layer-item + .layer-item { border-top: 1px solid var(--cream); }
+
+  .layer-toggle { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+  .layer-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .layer-toggle .slider {
+    position: absolute; inset: 0; background: var(--cream-dark);
+    border-radius: 20px; cursor: pointer; transition: background var(--transition);
+  }
+  .layer-toggle .slider::after {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 16px; height: 16px; background: var(--white); border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15); transition: transform var(--transition);
+  }
+  .layer-toggle input:checked + .slider { background: var(--forest); }
+  .layer-toggle input:checked + .slider::after { transform: translateX(16px); }
+
+  .layer-name { font-size: 13px; font-weight: 500; color: var(--text-dark); }
+  .layer-dept { font-size: 10px; color: var(--text-light); margin-top: 1px; }
+
+  .label-toggle-row {
+    display: flex; align-items: center; gap: 6px;
+    margin-top: 4px;
+  }
+  .label-toggle-row .mini-toggle { position: relative; width: 28px; height: 15px; flex-shrink: 0; }
+  .label-toggle-row .mini-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .label-toggle-row .mini-toggle .slider {
+    position: absolute; inset: 0; background: var(--cream-dark);
+    border-radius: 15px; cursor: pointer; transition: background var(--transition);
+  }
+  .label-toggle-row .mini-toggle .slider::after {
+    content: ''; position: absolute; top: 1.5px; left: 1.5px;
+    width: 12px; height: 12px; background: var(--white); border-radius: 50%;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.12); transition: transform var(--transition);
+  }
+  .label-toggle-row .mini-toggle input:checked + .slider { background: var(--gold); }
+  .label-toggle-row .mini-toggle input:checked + .slider::after { transform: translateX(13px); }
+  .label-toggle-text { font-size: 10.5px; color: var(--text-light); }
+
+  /* Overlay Toggle Button */
+  .overlay-toggle-btn {
+    width: 100%; padding: 10px 14px;
+    border: 1.5px solid var(--gold); border-radius: var(--radius);
+    background: transparent; font-family: 'DM Sans', sans-serif;
+    font-size: 13px; font-weight: 600; color: var(--gold);
+    cursor: pointer; transition: all var(--transition);
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    margin-bottom: 10px;
+  }
+  .overlay-toggle-btn:hover { background: rgba(200,169,78,0.08); }
+  .overlay-toggle-btn.active {
+    background: var(--gold); color: var(--forest);
+    border-color: var(--gold);
+  }
+  .overlay-toggle-btn svg { width: 16px; height: 16px; }
+
+  /* Export Buttons */
+  .export-btn {
+    width: 100%; padding: 13px 16px; border: none; border-radius: var(--radius);
+    font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 700;
+    cursor: pointer; transition: all var(--transition);
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    letter-spacing: 0.3px;
+  }
+  .export-btn-primary { background: var(--forest); color: var(--white); }
+  .export-btn-primary:hover { background: var(--forest-light); box-shadow: var(--shadow); transform: translateY(-1px); }
+  .export-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+  .export-btn svg { width: 16px; height: 16px; }
+
+  .export-status { margin-top: 10px; font-size: 12px; color: var(--text-mid); text-align: center; min-height: 18px; }
+  .export-status.exporting { color: var(--gold); }
+  .export-status.success   { color: var(--forest); }
+  .export-status.error     { color: var(--danger); }
+
+  /* ══════════════════════ MAP ══════════════════════ */
+  .map-container { flex: 1; position: relative; overflow: hidden; }
+  #viewDiv { width: 100%; height: 100%; }
+  .esri-attribution { font-size: 10px !important; }
+
+  /* ══════════════════════ EXTENT OVERLAY ══════════════════════ */
+  .extent-overlay-system {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none; z-index: 10;
+    display: none;                   /* hidden by default — user toggles on */
+  }
+  .extent-overlay-system.active { display: block; }
+
+  .dim-top, .dim-bottom, .dim-left, .dim-right {
+    position: absolute; background: rgba(27, 58, 45, 0.35);
+    backdrop-filter: blur(1px); pointer-events: none; transition: none;
+  }
+
+  .extent-frame {
+    position: absolute; border: 2.5px solid var(--gold);
+    box-shadow: 0 0 0 1px rgba(27,58,45,0.3), 0 4px 20px rgba(0,0,0,0.2);
+    pointer-events: none; z-index: 11;
+  }
+
+  .extent-frame-label {
+    position: absolute; top: -28px; left: 50%; transform: translateX(-50%);
+    background: var(--forest); color: var(--gold-light);
+    font-size: 10px; font-weight: 600; padding: 3px 10px;
+    border-radius: 4px; white-space: nowrap; letter-spacing: 0.5px;
+    pointer-events: none;
+  }
+
+  .frame-edge { position: absolute; pointer-events: auto; z-index: 12; }
+  .frame-edge.edge-top    { top: -6px;    left: 16px;  right: 16px; height: 12px; cursor: grab; }
+  .frame-edge.edge-bottom { bottom: -6px; left: 16px;  right: 16px; height: 12px; cursor: grab; }
+  .frame-edge.edge-left   { left: -6px;   top: 16px;   bottom: 16px; width: 12px; cursor: grab; }
+  .frame-edge.edge-right  { right: -6px;  top: 16px;   bottom: 16px; width: 12px; cursor: grab; }
+  .frame-edge:active { cursor: grabbing; }
+
+  .extent-corner {
+    position: absolute; width: 14px; height: 14px;
+    background: var(--gold); border: 2px solid var(--forest);
+    border-radius: 3px; pointer-events: auto; z-index: 13;
+    transition: background 0.15s, transform 0.15s;
+  }
+  .extent-corner.tl { top: -7px;    left: -7px;   cursor: nw-resize; }
+  .extent-corner.tr { top: -7px;    right: -7px;  cursor: ne-resize; }
+  .extent-corner.bl { bottom: -7px; left: -7px;   cursor: sw-resize; }
+  .extent-corner.br { bottom: -7px; right: -7px;  cursor: se-resize; }
+  .extent-corner:hover { background: var(--gold-light); transform: scale(1.2); }
+
+  .esri-ui-top-right { top: 12px !important; right: 12px !important; }
+
+  .map-scale-info {
+    position: absolute; bottom: 36px; left: 12px;
+    background: rgba(255,255,255,0.92); backdrop-filter: blur(6px);
+    padding: 6px 12px; border-radius: var(--radius-sm);
+    font-size: 11px; font-weight: 500; color: var(--text-dark);
+    box-shadow: var(--shadow); z-index: 5; pointer-events: none;
+  }
+
+
+  /* ══════════════════════ LAYER SEARCH + ACTIVE LAYERS ══════════════════════ */
+  #layerSearchWrapper { position: relative; margin-bottom: 10px; }
+  #layerSearchInput {
+    width: 100%; padding: 9px 12px 9px 34px;
+    border: 1.5px solid var(--cream-dark); border-radius: var(--radius-sm);
+    font-family: 'DM Sans', sans-serif; font-size: 13px; color: var(--text-dark);
+    background: var(--white); outline: none; transition: border-color var(--transition);
+  }
+  #layerSearchInput:focus { border-color: var(--forest-pale); }
+  #layerSearchInput::placeholder { color: var(--text-light); }
+  .ls-search-icon {
+    position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
+    width: 14px; height: 14px; color: var(--stone); pointer-events: none;
+  }
+  #layerSearchResults {
+    position: absolute; top: 100%; left: 0; right: 0; z-index: 100;
+    background: var(--white); border: 1px solid var(--cream-dark); border-top: none;
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+    max-height: 260px; overflow-y: auto; display: none;
+    box-shadow: 0 6px 16px rgba(0,0,0,0.1);
+  }
+  .ls-item {
+    padding: 8px 12px; cursor: pointer; border-bottom: 1px solid rgba(0,0,0,0.04);
+    display: flex; flex-direction: column; gap: 1px;
+  }
+  .ls-item:hover { background: rgba(200,169,78,0.08); }
+  .ls-title { font-size: 12.5px; font-weight: 500; color: var(--text-dark); }
+  .ls-match { font-weight: 700; color: var(--forest); }
+  .ls-owner { font-size: 10.5px; color: var(--text-light); }
+  .ls-status { padding: 12px; font-size: 12px; color: var(--text-light); text-align: center; }
+
+  /* Active layer cards */
+  .active-layer-card {
+    background: rgba(27,58,45,0.03); border: 1px solid var(--cream-dark);
+    border-radius: var(--radius-sm); padding: 8px 10px; margin-bottom: 6px;
+    transition: border-color var(--transition);
+  }
+  .active-layer-card:hover { border-color: rgba(27,58,45,0.15); }
+  .alc-top { display: flex; align-items: center; gap: 8px; }
+  .alc-toggle { position: relative; width: 32px; height: 17px; flex-shrink: 0; }
+  .alc-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .alc-toggle .slider {
+    position: absolute; inset: 0; background: var(--cream-dark); border-radius: 17px;
+    cursor: pointer; transition: background var(--transition);
+  }
+  .alc-toggle .slider::after {
+    content: ""; position: absolute; top: 2px; left: 2px;
+    width: 13px; height: 13px; background: var(--white); border-radius: 50%;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.12); transition: transform var(--transition);
+  }
+  .alc-toggle input:checked + .slider { background: var(--forest); }
+  .alc-toggle input:checked + .slider::after { transform: translateX(15px); }
+  .alc-name { flex: 1; font-size: 12px; font-weight: 500; color: var(--text-dark);
+              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .alc-remove {
+    background: none; border: none; cursor: pointer; color: var(--text-light);
+    font-size: 13px; padding: 2px 5px; border-radius: 3px; transition: all var(--transition);
+    flex-shrink: 0;
+  }
+  .alc-remove:hover { color: var(--danger); background: rgba(181,67,42,0.08); }
+  .alc-controls { display: flex; align-items: center; gap: 6px; margin-top: 6px; padding-left: 40px; }
+  .alc-controls label { font-size: 10px; color: var(--text-light); white-space: nowrap; }
+  .alc-controls input[type="range"] {
+    flex: 1; height: 3px; accent-color: var(--gold); cursor: pointer;
+  }
+  .alc-controls .alc-pct { font-size: 10px; color: var(--text-light); min-width: 28px; text-align: right; }
+
+  .clear-layers-btn {
+    width: 100%; padding: 7px; margin-top: 6px; border: 1px solid var(--cream-dark);
+    border-radius: var(--radius-sm); background: var(--white);
+    font-family: 'DM Sans', sans-serif; font-size: 11px; font-weight: 500;
+    color: var(--text-light); cursor: pointer; transition: all var(--transition);
+    display: flex; align-items: center; justify-content: center; gap: 5px;
+  }
+  .clear-layers-btn:hover { border-color: var(--danger); color: var(--danger); }
+
+  /* ══════════════════════ DRAWING TOOLS ══════════════════════ */
+  .draw-toggle-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+  .draw-toggle-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--stone); }
+  .draw-toggle { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+  .draw-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .draw-toggle .slider {
+    position: absolute; inset: 0; background: var(--cream-dark); border-radius: 20px;
+    cursor: pointer; transition: background var(--transition);
+  }
+  .draw-toggle .slider::after {
+    content: ''; position: absolute; top: 2px; left: 2px;
+    width: 16px; height: 16px; background: var(--white); border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15); transition: transform var(--transition);
+  }
+  .draw-toggle input:checked + .slider { background: var(--gold); }
+  .draw-toggle input:checked + .slider::after { transform: translateX(16px); }
+
+  #drawingPanel { display: none; }
+  .draw-toolbar { display: flex; gap: 5px; margin-bottom: 8px; }
+  .draw-tool-btn {
+    flex: 1; padding: 7px 2px; border: 1.5px solid var(--cream-dark); border-radius: var(--radius-sm);
+    background: var(--white); cursor: pointer; font-family: 'DM Sans', sans-serif;
+    font-size: 10.5px; font-weight: 500; color: var(--text-mid);
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    transition: all var(--transition);
+  }
+  .draw-tool-btn:hover { border-color: var(--gold); }
+  .draw-tool-btn.active { border-color: var(--gold); background: var(--gold); color: var(--white); }
+  .draw-tool-btn .dicon { font-size: 15px; line-height: 1; }
+
+  .draw-opts-row { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+  .draw-opts-row label { font-size: 11px; color: var(--text-light); }
+  #drawColorPicker { width: 28px; height: 22px; border: 1px solid var(--cream-dark); border-radius: 4px; cursor: pointer; padding: 1px; }
+  #drawFillSlider { flex: 1; accent-color: var(--gold); height: 4px; cursor: pointer; }
+  #drawFillVal { font-size: 10px; color: var(--text-light); min-width: 26px; text-align: right; }
+  .draw-actions { display: flex; gap: 6px; }
+  .draw-actions button {
+    padding: 5px 10px; font-size: 11px; font-family: 'DM Sans', sans-serif;
+    border: 1.5px solid var(--cream-dark); border-radius: var(--radius-sm);
+    background: var(--white); color: var(--text-mid); cursor: pointer; transition: all var(--transition);
+  }
+  .draw-actions button:hover { border-color: var(--gold); }
+
+
+  /* Layer symbology expand */
+  .alc-style-btn {
+    background: none; border: 1px solid var(--cream-dark); border-radius: 3px;
+    cursor: pointer; padding: 2px 5px; font-size: 11px; color: var(--text-light);
+    transition: all var(--transition); flex-shrink: 0; display: flex; align-items: center; gap: 3px;
+  }
+  .alc-style-btn:hover { border-color: var(--gold); color: var(--gold); }
+  .alc-swatch {
+    display: inline-block; width: 12px; height: 12px; border-radius: 2px;
+    border: 1px solid rgba(0,0,0,0.15); flex-shrink: 0;
+  }
+  .alc-style-panel {
+    display: none; padding: 8px 10px 4px 40px; margin-top: 2px;
+    border-top: 1px dashed var(--cream-dark);
+  }
+  .alc-style-panel.open { display: block; }
+  .alc-style-row {
+    display: flex; align-items: center; gap: 6px; margin-bottom: 6px;
+  }
+  .alc-style-row label { font-size: 10px; color: var(--text-light); min-width: 40px; }
+  .alc-style-row input[type="color"] { width: 26px; height: 20px; border: 1px solid var(--cream-dark); border-radius: 3px; cursor: pointer; padding: 1px; }
+  .alc-style-row input[type="range"] { flex: 1; accent-color: var(--gold); height: 3px; cursor: pointer; }
+  .alc-style-row .alc-sw-pct { font-size: 9px; color: var(--text-light); min-width: 22px; text-align: right; }
+
+  /* Legend overlay */
+  .legend-overlay {
+    position: absolute; z-index: 15; pointer-events: auto;
+    bottom: 44px; right: 12px; max-height: 50vh;
+    width: 200px; background: rgba(255,255,255,0.94);
+    backdrop-filter: blur(6px);
+    border: 1px solid var(--cream-dark); border-radius: var(--radius);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    overflow-y: auto; display: none; font-family: 'DM Sans', sans-serif;
+  }
+  .legend-overlay.visible { display: block; }
+  .legend-header {
+    padding: 8px 10px; font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 1px; color: var(--stone); border-bottom: 1px solid var(--cream-dark);
+    display: flex; align-items: center; justify-content: space-between;
+    position: sticky; top: 0; background: rgba(255,255,255,0.96);
+  }
+  .legend-close {
+    background: none; border: none; cursor: pointer; color: var(--text-light);
+    font-size: 13px; padding: 0 2px; transition: color var(--transition);
+  }
+  .legend-close:hover { color: var(--text-dark); }
+  .legend-body { padding: 6px 10px; }
+  .legend-section-title {
+    font-size: 9px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.8px; color: var(--stone); margin: 6px 0 4px; padding-top: 4px;
+    border-top: 1px solid var(--cream-dark);
+  }
+  .legend-section-title:first-child { border-top: none; margin-top: 0; padding-top: 0; }
+  .legend-item {
+    display: flex; align-items: center; gap: 7px; padding: 3px 0;
+  }
+  .legend-swatch {
+    width: 16px; height: 12px; border-radius: 2px;
+    border: 1px solid rgba(0,0,0,0.1); flex-shrink: 0;
+  }
+  .legend-swatch.line { height: 3px; border-radius: 1px; }
+  .legend-swatch.point { width: 10px; height: 10px; border-radius: 50%; }
+  .legend-label { font-size: 11px; color: var(--text-dark); }
+  .legend-toggle-btn {
+    padding: 5px 10px; border: 1px solid var(--cream-dark); border-radius: var(--radius-sm);
+    background: var(--white); font-family: 'DM Sans', sans-serif; font-size: 11px;
+    font-weight: 500; color: var(--text-mid); cursor: pointer; transition: all var(--transition);
+    display: flex; align-items: center; gap: 5px; margin-bottom: 8px;
+  }
+  .legend-toggle-btn:hover { border-color: var(--gold); }
+  .legend-toggle-btn.active { background: var(--forest); color: var(--cream); border-color: var(--forest); }
+
+  /* Drawing label field in graphic editor */
+  .ge-label-row {
+    display: flex; align-items: center; gap: 6px; margin-bottom: 8px;
+  }
+  .ge-label-row label { font-size: 11px; color: var(--text-light); min-width: 38px; }
+  .ge-label-row input { flex: 1; padding: 5px 8px; font-size: 12px; }
+
+
+
+  /* Basemap selector grid */
+  .basemap-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+  }
+  .basemap-opt {
+    padding: 8px 4px; border: 1.5px solid var(--cream-dark); border-radius: var(--radius-sm);
+    background: var(--white); cursor: pointer; font-family: 'DM Sans', sans-serif;
+    display: flex; flex-direction: column; align-items: center; gap: 3px;
+    transition: all var(--transition);
+  }
+  .basemap-opt:hover { border-color: var(--gold); }
+  .basemap-opt.active { border-color: var(--forest); background: rgba(27,58,45,0.05); }
+  .bm-icon { font-size: 18px; line-height: 1; }
+  .bm-label { font-size: 10px; font-weight: 500; color: var(--text-mid); }
+  .basemap-opt.active .bm-label { color: var(--forest); font-weight: 600; }
+
+
+  .alc-themed-badge {
+    font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--gold); background: rgba(200,169,78,0.1);
+    padding: 2px 6px; border-radius: 3px; flex-shrink: 0;
+  }
+  /* Layer rename */
+  .alc-name { cursor: default; }
+  .alc-name-input {
+    flex: 1; padding: 2px 6px; font-size: 12px; font-weight: 500;
+    font-family: 'DM Sans', sans-serif; color: var(--text-dark);
+    border: 1.5px solid var(--gold); border-radius: 3px; outline: none;
+    background: var(--white);
+  }
+  /* Export gating hint */
+  .export-gate-hint {
+    font-size: 11px; color: var(--text-light); text-align: center;
+    margin-top: 6px; transition: opacity var(--transition);
+  }
+
+  /* Draw text input row */
+  .draw-text-row {
+    display: flex; align-items: center; gap: 6px; margin-bottom: 8px;
+  }
+  .draw-text-row label { font-size: 11px; color: var(--text-light); white-space: nowrap; }
+
+  /* Graphic Editor Popup */
+  .graphic-editor {
+    position: absolute; z-index: 50;
+    width: 240px; background: var(--white);
+    border: 1px solid var(--cream-dark); border-radius: var(--radius);
+    box-shadow: 0 8px 28px rgba(0,0,0,0.18);
+    display: none; /* shown via JS */
+    overflow: hidden;
+  }
+  .graphic-editor.visible { display: block; }
+  .ge-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 12px; background: var(--forest); color: var(--cream);
+    cursor: move;
+  }
+  .ge-title { font-size: 12px; font-weight: 600; letter-spacing: 0.3px; }
+  .ge-close {
+    background: none; border: none; color: var(--cream); font-size: 14px;
+    cursor: pointer; padding: 2px 4px; border-radius: 3px; opacity: 0.7;
+    transition: opacity var(--transition);
+  }
+  .ge-close:hover { opacity: 1; }
+  .ge-body { padding: 10px 12px; }
+  .ge-row {
+    display: flex; align-items: center; gap: 6px; margin-bottom: 8px;
+  }
+  .ge-row:last-child { margin-bottom: 0; }
+  .ge-row label { font-size: 11px; color: var(--text-light); min-width: 38px; }
+  .ge-row input[type="color"] { width: 28px; height: 22px; border: 1px solid var(--cream-dark); border-radius: 4px; cursor: pointer; padding: 1px; }
+  .ge-row input[type="range"] { flex: 1; accent-color: var(--gold); height: 4px; cursor: pointer; }
+  .ge-pct { font-size: 10px; color: var(--text-light); min-width: 30px; text-align: right; }
+  .ge-actions { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--cream-dark); }
+  .ge-delete {
+    width: 100%; padding: 6px; border: 1px solid var(--danger); border-radius: var(--radius-sm);
+    background: transparent; color: var(--danger); font-family: 'DM Sans', sans-serif;
+    font-size: 11px; font-weight: 600; cursor: pointer; transition: all var(--transition);
+  }
+  .ge-delete:hover { background: var(--danger); color: var(--white); }
+
+  /* ══════════════════════ LOADING ══════════════════════ */
+  .loading-overlay {
+    position: fixed; inset: 0; z-index: 999; background: var(--forest);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    transition: opacity 0.6s ease, visibility 0.6s ease;
+  }
+  .loading-overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+
+  .loading-logo {
+    height: 72px;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 18px; animation: pulse-glow 2s ease-in-out infinite;
+    overflow: hidden;
+    background: var(--gold); border-radius: 6px; padding: 4px 6px;
+  }
+  .loading-logo.has-logo { background: transparent; border-radius: 0; padding: 0; }
+  .loading-logo img { height: 100%; width: auto; object-fit: contain; }
+  .loading-logo .logo-fallback {
+    font-family: 'Playfair Display', serif; font-weight: 700; font-size: 22px; color: var(--forest);
+  }
+
+  .loading-text { font-family: 'Playfair Display', serif; font-size: 18px; color: var(--cream); letter-spacing: 0.5px; }
+  .loading-sub  { font-size: 12px; color: var(--gold-warm); margin-top: 6px; opacity: 0.7; }
+
+  @keyframes pulse-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(200,169,78,0.3); }
+    50%      { box-shadow: 0 0 0 16px rgba(200,169,78,0); }
+  }
+
+  @media (max-width: 800px) {
+    .side-panel { width: 100%; height: 45vh; border-right: none; border-top: 1px solid var(--cream-dark); }
+    .app-shell  { flex-direction: column-reverse; }
+    .map-container { height: 55vh; }
+    .coord-badge { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-logo has-logo" id="loadingLogo"><img id="loadingLogoImg" alt="Logo"></div>
+  <div class="loading-text">City of Fair Oaks Ranch</div>
+  <div class="loading-sub">Initializing Map Export Tool…</div>
+</div>
+
+<!-- Header -->
+<header class="app-header">
+  <div class="logo-mark has-logo" id="headerLogo"><img id="headerLogoImg" alt="Logo"></div>
+  <h1>Fair Oaks Ranch <span>— Map Export</span></h1>
+  <div class="header-right">
+    <div class="coord-badge">NAD83 · TX S Central · FIPS 4204</div>
+    <button class="help-btn" id="helpBtn" title="Take a guided tour" aria-label="Help and guided tour">
+      <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span>Help</span>
+    </button>
+  </div>
+</header>
+
+<!-- App Shell -->
+<div class="app-shell">
+  <aside class="side-panel">
+
+    <!-- Mode Toggle -->
+    <div class="panel-section">
+      <div class="section-label">Export Mode</div>
+      <div class="mode-toggle">
+        <button class="mode-btn active" data-mode="print" onclick="setMode('print')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          Print PDF
+        </button>
+        <button class="mode-btn" data-mode="digital" onclick="setMode('digital')">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          Digital PNG
+        </button>
+      </div>
+    </div>
+
+    <!-- Print Settings -->
+    <div class="panel-section" id="printSettings">
+      <div class="section-label">Page Setup</div>
+      <div class="form-group">
+        <label class="form-label">Paper Size</label>
+        <select class="form-select" id="paperSize" onchange="updateOverlay()">
+          <option value="letter">Letter (8.5 × 11 in)</option>
+          <option value="tabloid">Tabloid (11 × 17 in)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Orientation</label>
+        <div class="orient-group">
+          <button class="orient-btn active" data-orient="portrait" onclick="setOrientation('portrait')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="1.5"/></svg>
+            Portrait
+          </button>
+          <button class="orient-btn" data-orient="landscape" onclick="setOrientation('landscape')">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="1.5"/></svg>
+            Landscape
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Digital Settings -->
+    <div class="panel-section" id="digitalSettings" style="display:none;">
+      <div class="section-label">Dimensions</div>
+      <div class="form-group">
+        <label class="form-label">Preset</label>
+        <select class="form-select" id="digitalPreset" onchange="updateOverlay()">
+          <option value="16:9">16:9 Landscape Banner (1920 × 1080)</option>
+          <option value="1:1">1:1 Square (1080 × 1080)</option>
+          <option value="4:5">4:5 Portrait Social (1080 × 1350)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Zoom Level -->
+    <div class="panel-section">
+      <div class="section-label">Map View</div>
+      <div class="form-group">
+        <label class="form-label">Zoom Level</label>
+        <div class="zoom-row">
+          <button class="zoom-btn" onclick="adjustZoom(-1)">−</button>
+          <input class="form-input" type="number" id="zoomInput" min="11" max="20" step="1" value="14"
+                 onchange="applyZoom(this.value)" onkeydown="if(event.key==='Enter'){applyZoom(this.value);this.blur();}">
+          <button class="zoom-btn" onclick="adjustZoom(1)">+</button>
+          <span class="zoom-current" id="zoomScale"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Map Details -->
+
+    <!-- Basemap Selector -->
+    <div class="panel-section">
+      <div class="section-label">Basemap</div>
+      <div class="basemap-grid" id="basemapGrid">
+        <button class="basemap-opt active" data-bm="osm" title="OpenStreetMap">
+          <span class="bm-icon">🗺</span><span class="bm-label">Streets</span>
+        </button>
+        <button class="basemap-opt" data-bm="satellite" title="Satellite Imagery">
+          <span class="bm-icon">🛰</span><span class="bm-label">Satellite</span>
+        </button>
+        <button class="basemap-opt" data-bm="hybrid" title="Satellite + Labels">
+          <span class="bm-icon">🏷</span><span class="bm-label">Hybrid</span>
+        </button>
+        <button class="basemap-opt" data-bm="topo" title="Topographic">
+          <span class="bm-icon">⛰</span><span class="bm-label">Topo</span>
+        </button>
+        <button class="basemap-opt" data-bm="gray" title="Light Gray Canvas">
+          <span class="bm-icon">◻</span><span class="bm-label">Light</span>
+        </button>
+        <button class="basemap-opt" data-bm="dark-gray" title="Dark Gray Canvas">
+          <span class="bm-icon">◼</span><span class="bm-label">Dark</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="section-label">Map Details</div>
+      <div class="form-group">
+        <label class="form-label">Title</label>
+        <input class="form-input" type="text" id="mapTitle" value="City of Fair Oaks Ranch" placeholder="Enter map title…">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Subtitle</label>
+        <input class="form-input" type="text" id="mapSubtitle" value="General Parcel Map" placeholder="Optional subtitle…">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Department</label>
+        <select class="form-select" id="department">
+          <option value="Public Works">Public Works</option>
+          <option value="Utilities">Utilities</option>
+          <option value="Engineering">Engineering</option>
+          <option value="Planning & Development">Planning &amp; Development</option>
+          <option value="Administration">Administration</option>
+        </select>
+      </div>
+    </div>
+
+
+    <!-- Unified Layer Management -->
+    <div class="panel-section">
+      <div class="section-label">Map Layers</div>
+      <div id="layerSearchWrapper">
+        <svg class="ls-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        <input type="text" id="layerSearchInput" placeholder="Search layers to add…" autocomplete="off">
+        <div id="layerSearchResults"></div>
+      </div>
+      <div id="activeLayerList"></div>
+      <button class="clear-layers-btn" id="clearAllLayers" style="display:none;">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+        Clear All Layers
+      </button>
+    </div>
+
+
+    <!-- Drawing Tools -->
+    <div class="panel-section">
+      <div class="draw-toggle-row">
+        <span class="draw-toggle-label">Drawing Tools</span>
+        <label class="draw-toggle">
+          <input type="checkbox" id="drawingToggle">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div id="drawingPanel">
+        <div class="draw-opts-row">
+          <label>Color</label>
+          <input type="color" id="drawColorPicker" value="#C8A94E">
+          <label>Fill</label>
+          <input type="range" id="drawFillSlider" min="0" max="100" value="30">
+          <span id="drawFillVal">30%</span>
+        </div>
+        <div class="draw-opts-row">
+          <label>Opacity</label>
+          <input type="range" id="drawOpacitySlider" min="10" max="100" value="100">
+          <span id="drawOpacityVal">100%</span>
+        </div>
+        <div class="draw-toolbar">
+          <button class="draw-tool-btn" data-tool="point"><span class="dicon">●</span>Point</button>
+          <button class="draw-tool-btn" data-tool="polyline"><span class="dicon">╱</span>Line</button>
+          <button class="draw-tool-btn" data-tool="rectangle"><span class="dicon">▭</span>Rect</button>
+          <button class="draw-tool-btn" data-tool="polygon"><span class="dicon">⬠</span>Polygon</button>
+          <button class="draw-tool-btn" data-tool="text" id="textToolBtn"><span class="dicon">A</span>Text</button>
+        </div>
+        <div class="draw-text-row" id="drawTextRow" style="display:none;">
+          <label>Text</label>
+          <input type="text" id="drawTextInput" class="form-input" value="Label" placeholder="Enter label text…" style="padding:6px 8px;font-size:12px;">
+          <label style="margin-left:6px;">Size</label>
+          <input type="number" id="drawTextSize" class="form-input" value="14" min="8" max="48" style="width:50px;padding:6px 4px;font-size:12px;text-align:center;">
+        </div>
+        <div class="draw-actions">
+          <button id="drawCancel">Cancel</button>
+          <button id="drawClear">Clear All</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Export Actions (sticky) -->
+    <div class="panel-section" style="position:sticky; bottom:0; background:var(--white); border-top:1px solid var(--cream-dark); z-index:2;">
+      <!-- Legend toggle -->
+      <button class="legend-toggle-btn" id="legendToggleBtn">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><line x1="14" y1="4" x2="21" y2="4"/><line x1="14" y1="9" x2="21" y2="9"/><rect x="3" y="14" width="7" height="7"/><line x1="14" y1="15" x2="21" y2="15"/><line x1="14" y1="20" x2="21" y2="20"/></svg>
+        <span id="legendToggleLabel">Show Legend</span>
+      </button>
+
+      <!-- Overlay toggle -->
+      <button class="overlay-toggle-btn" id="overlayToggle" onclick="toggleOverlay()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 3v18"/></svg>
+        <span id="overlayToggleLabel">Show Export Frame</span>
+      </button>
+      <button class="export-btn export-btn-primary" id="exportPrimary" onclick="doExport()" disabled>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span id="exportLabel">Export PDF</span>
+      </button>
+      <div class="export-gate-hint" id="exportGateHint">Enable the export frame to unlock export</div>
+      <div class="export-status" id="exportStatus"></div>
+    </div>
+
+  </aside>
+
+  <!-- Map -->
+  <div class="map-container" id="mapContainer">
+    <div id="viewDiv"></div>
+
+    <!-- Extent Overlay (starts hidden — no .active class) -->
+    <div class="extent-overlay-system" id="extentSystem">
+      <div class="dim-top" id="dimTop"></div>
+      <div class="dim-right" id="dimRight"></div>
+      <div class="dim-bottom" id="dimBottom"></div>
+      <div class="dim-left" id="dimLeft"></div>
+      <div class="extent-frame" id="extentFrame">
+        <span class="extent-frame-label" id="extentLabel">LETTER · PORTRAIT</span>
+        <div class="frame-edge edge-top"    data-action="move"></div>
+        <div class="frame-edge edge-bottom" data-action="move"></div>
+        <div class="frame-edge edge-left"   data-action="move"></div>
+        <div class="frame-edge edge-right"  data-action="move"></div>
+        <div class="extent-corner tl" data-corner="tl"></div>
+        <div class="extent-corner tr" data-corner="tr"></div>
+        <div class="extent-corner bl" data-corner="bl"></div>
+        <div class="extent-corner br" data-corner="br"></div>
+      </div>
+    </div>
+
+    <!-- Legend Overlay -->
+    <div class="legend-overlay" id="legendOverlay">
+      <div class="legend-header">
+        <span>Legend</span>
+        <button class="legend-close" id="legendClose">✕</button>
+      </div>
+      <div class="legend-body" id="legendBody"></div>
+    </div>
+
+    <div class="map-scale-info" id="scaleInfo">Scale: —</div>
+
+    <!-- Graphic Editor Popup -->
+    <div class="graphic-editor" id="graphicEditor">
+      <div class="ge-header">
+        <span class="ge-title">Edit Shape</span>
+        <button class="ge-close" id="geClose">✕</button>
+      </div>
+      <div class="ge-body">
+        <div class="ge-row">
+          <label>Color</label>
+          <input type="color" id="geColor" value="#C8A94E">
+        </div>
+        <div class="ge-row">
+          <label>Fill</label>
+          <input type="range" id="geFill" min="0" max="100" value="30">
+          <span class="ge-pct" id="geFillVal">30%</span>
+        </div>
+        <div class="ge-row">
+          <label>Opacity</label>
+          <input type="range" id="geOpacity" min="5" max="100" value="100">
+          <span class="ge-pct" id="geOpacityVal">100%</span>
+        </div>
+        <div class="ge-row" id="geTextRow" style="display:none;">
+          <label>Text</label>
+          <input type="text" id="geText" class="form-input" value="" style="flex:1;padding:5px 8px;font-size:12px;">
+        </div>
+        <div class="ge-row" id="geTextSizeRow" style="display:none;">
+          <label>Size</label>
+          <input type="number" id="geTextSize" value="14" min="8" max="48" class="form-input" style="width:52px;padding:5px 4px;font-size:12px;text-align:center;">
+        </div>
+        <div class="ge-label-row" id="geLabelRow">
+          <label>Label</label>
+          <input type="text" id="geLabelInput" class="form-input" value="" placeholder="Add label…">
+        </div>
+        <div class="ge-actions">
+          <button class="ge-delete" id="geDelete">Delete Shape</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+// APP CONFIGURATION
+// ═══════════════════════════════════════════════════════════════════════
+const APP_CONFIG = {
+  portalUrl: "https://fairoaksranch.maps.arcgis.com",
+  mapCenter: [-98.69, 29.745],
+  mapZoom: 14,
+  orgName: "City of Fair Oaks Ranch",
+  department: "Public Works",
+  coordinateSystem: "NAD 1983 StatePlane Texas South Central (FIPS 4204)",
+  disclaimer: "For general reference only. Not for legal boundary determination.",
+  dpi: 150,
+  logoUrl: "logo.svg",
+  logoFallback: "FOR",
+
+  // ── ArcGIS API Key (optional) ──────────────────────────────────────
+  // When set, enables vector tile basemaps (crisp text at every zoom).
+  // Generate at: https://developers.arcgis.com/api-keys/
+  // Or from your AGOL org: Organization Settings → Security → API Keys.
+  // Leave empty string "" to use raster OSM tiles (no key required).
+  apiKey: "",
+
+  // ── Basemap ────────────────────────────────────────────────────────
+  // When apiKey is set, any of these work (vector, sharp at all zooms):
+  //   "streets-navigation-vector"  — navigation-style (recommended)
+  //   "streets-vector"             — general purpose
+  //   "topo-vector"                — topographic
+  //   "gray-vector"                — light gray canvas
+  //   "dark-gray-vector"           — dark gray canvas
+  // When apiKey is empty, only "osm" (raster) works without a key.
+  basemap: "streets-navigation-vector",
+
+  layers: [
+    { id: "bd5079b30310433998c6a54652074dd6", sublayer: 0,
+      title: "Parcels", dept: "General", visible: true, type: "parcels" },
+    { id: null, url: "https://services6.arcgis.com/Cnwpb7mZuifVHE6A/arcgis/rest/services/CoFORPW_Road_Centerline/FeatureServer",
+      title: "Road Centerlines", dept: "Public Works", visible: true, type: "roads" },
+    { id: null, url: "https://services6.arcgis.com/Cnwpb7mZuifVHE6A/arcgis/rest/services/FOR_Jurisdictional/FeatureServer",
+      title: "Jurisdictional Boundaries", dept: "Administration", visible: true, type: "boundaries" }
+  ],
+
+  paperSizes: {
+    letter:  { portrait: { w: 1275, h: 1650 }, landscape: { w: 1650, h: 1275 } },
+    tabloid: { portrait: { w: 1650, h: 2550 }, landscape: { w: 2550, h: 1650 } }
+  },
+  digitalPresets: {
+    "16:9": { w: 1920, h: 1080 },
+    "1:1":  { w: 1080, h: 1080 },
+    "4:5":  { w: 1080, h: 1350 }
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// LOGO — embedded as base64 data URI (no external file dependency)
+//
+// This eliminates all fetch/CORS/file:// issues. The SVG is encoded
+// directly in the source. To update the logo: re-encode the SVG file
+// with: base64 -w 0 logo.svg  and paste below.
+// ═══════════════════════════════════════════════════════════════════════
+var logoLoaded = true;
+var logoImgDataUrl = null;  // will hold PNG version for jsPDF
+
+var LOGO_DATA_URI = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZlcnNpb249IjEuMSIgdmlld0JveD0iMCAwIDk1NC41OTA0MzYgODYxLjg4MDE4MiI+CiAgPGRlZnM+CiAgICA8c3R5bGU+CiAgICAgIC5zdDAgewogICAgICAgIGZpbGw6ICNmZmY7CiAgICAgIH0KCiAgICAgIC5zdDEgewogICAgICAgIGZpbGw6ICMxOTI3Mzc7CiAgICAgIH0KCiAgICAgIC5zdDIgewogICAgICAgIGZpbGw6ICM4ZDk1NmM7CiAgICAgIH0KICAgIDwvc3R5bGU+CiAgPC9kZWZzPgogIDxnPgogICAgPHBhdGggY2xhc3M9InN0MCIgZD0iTTk1NC41OTAyMDEsMTc0LjIzOTk5aC0xNzUuODg5OTU0YzU1LjE3OTk5Myw3NC4xOTAwMDIsODUuMzE5OTQ2LDE2NC44MjAwMDcsODUuMzE5OTQ2LDI1Ny43NjAwMSwwLDExNS4zOTAwMTUtNDQuOTI5OTkzLDIyMy44OTAwMTUtMTI2LjUyOTk2OCwzMDUuNDcwMDMyLTgxLjYwMDAzNyw4MS41OTk5NzYtMTkwLjEwMDAzNywxMjYuNTI5OTY4LTMwNS40ODk5OSwxMjYuNTI5OTY4cy0yMjMuODY5OTk1LTQ0LjkyOTk5My0zMDUuNDcwMDMyLTEyNi41Mjk5NjhDNDQuOTMwMjI4LDY1NS44OTAwMTUuMDAwMjM1LDU0Ny4zOTAwMTUuMDAwMjM1LDQzMlM0NC45MzAyMjgsMjA4LjEwOTk4NSwxMjYuNTMwMjAzLDEyNi41MzAwMjlDMjA4LjEzMDI0LDQ0LjkyOTk5MywzMTYuNjEwMjIsMCw0MzIuMDAwMjM1LDBoNTIyLjU4OTk2NnYxNzQuMjM5OTlaIi8+CiAgICA8cGF0aCBjbGFzcz0ic3QyIiBkPSJNOTU0LjU5MDIwMSwwSDQzMi4wMDAyMzVjLTExNS4zOTAwMTUsMC0yMjMuODY5OTk1LDQ0LjkyOTk5My0zMDUuNDcwMDMyLDEyNi41MzAwMjlDNDQuOTMwMjI4LDIwOC4xMDk5ODUuMDAwMjM1LDMxNi42MDk5ODUuMDAwMjM1LDQzMnM0NC45Mjk5OTMsMjIzLjg5MDAxNSwxMjYuNTI5OTY4LDMwNS40NzAwMzJjODEuNjAwMDM3LDgxLjU5OTk3NiwxOTAuMDgwMDE3LDEyNi41Mjk5NjgsMzA1LjQ3MDAzMiwxMjYuNTI5OTY4czIyMy44ODk5NTQtNDQuOTI5OTkzLDMwNS40ODk5OS0xMjYuNTI5OTY4YzgxLjU5OTk3Ni04MS41ODAwMTcsMTI2LjUyOTk2OC0xOTAuMDgwMDE3LDEyNi41Mjk5NjgtMzA1LjQ3MDAzMiwwLTkyLjk0MDAwMi0zMC4xMzk5NTQtMTgzLjU3MDAwNy04NS4zMTk5NDYtMjU3Ljc2MDAxaDE3NS44ODk5NTRWMFpNOTMxLjQ1MDI0NywxNTEuMTAwMDM3aC0yMDEuMzUwMDM3bDE1Ljg1OTk4NSwxOC45ODk5OWM2MS4yMDAwMTIsNzMuMjY5OTU4LDk0LjkyMDA0NCwxNjYuMjc5OTY4LDk0LjkyMDA0NCwyNjEuOTA5OTczLDAsMjI1LjQ1MDAxMi0xODMuNDI5OTkzLDQwOC44NTk5ODUtNDA4Ljg4MDAwNSw0MDguODU5OTg1UzIzLjE0MDE4OSw2NTcuNDUwMDEyLDIzLjE0MDE4OSw0MzIsMjA2LjU1MDIyMywyMy4xNDAwMTUsNDMyLjAwMDIzNSwyMy4xNDAwMTVoNDk5LjQ1MDAxMnYxMjcuOTYwMDIyWiIvPgogICAgPHBhdGggY2xhc3M9InN0MSIgZD0iTTY0Mi4xMDc4NTUsNTM5LjUzNzIzMmMtMTguNTcwMzE2LDI4LjMyMDU4OC0zNC42ODM3MTEsMjAuMDQ2MDctNjQuNjAwNjk4LDE2LjMyMzY4OS4xMzE1NDYsNy4wOTY0MzYsMy44MDQzMjIsMTMuMjE4Mzg3LDQuNjYzNzE2LDE3LjMzODUwMywyLjA1OTU3MSw4LjEzMTYxNi03LjAxNjEzLDE1Ljc5ODE4NS0xNS43OTAyMTEsMTYuMTA5MzY1LTkuMTAwNzkyLDEuNjY4NzQzLTIxLjY4ODI4LTEwLjAyMjc2Ny0yOC4xMjUxNzQtNS4zMzk3OCw2LjE2MjExOSwxMi43OTA0MzYsMTcuMDI2MDUsMjQuMjQ4OTg0LDYuNjkzNjc4LDQwLjE5NTQ2OC0xMS4xMzU5NzgsOS40NTc5MjUtMjYuNTM4ODg1LS4wMTY2MjctMzguMTMwNDc0LTIuMTU0Mzg2LTE0LjAzMjQzNS0uOTc5NjM3LTQzLjUwOTU4MSwxMS4wMjU3NzgtNDYuODg3OTg4LTEwLjIzNzU2My0xLjE0MjU0NC0xMC42NzAzMTIsMi40NTIyMy0yNC4yOTUwODYuODg4NDM1LTI5LjI5ODcxNy0uMjc3MjY3LTIuNjc1Njk4LTIuMjE4MzQxLTEzLjUzMTE5Mi03LjI2MTQ4OS0xMi45NDE5MTUtMTAuMjQwMjg4LDUuMDEyMzA1LDIuMjY4Nzc2LDE4LjY3ODExMS0zLjkzMzIwMSwyNS43NzYxOTktMy4zNTYxMTYsMTEuOTI2NjE5LTIzLjU4NzE1OCwxMS41NTYwNDMtMzEuODEyODYyLDQuMjczNTE3LTEwLjU1MTE1MS05Ljk3NjEyLTQuODk3MDI0LTQwLjA1MDM5Ny0xNi45ODEwMzctMjYuODA5Mzc0LTMuMDg0OTEsNC43Njk0NDItMy4wNTg4NDcsMTAuOTI3ODcyLTUuNTcyNjU3LDE1LjIzNzU0Mi00LjU2Mzg1OCwxMC4zNTA3NjctMTYuMDQ1Nzg5LDcuODcyNDA1LTIwLjg4MDU0MywzLjIyMTMwNS0yMC45NjI1NzEtMjguNzk4MzA2LTI1LjU4NjQxNi0zMy4yMzg0NDgtNDUuOTQ0MjA5LTU1Ljg0MTk0My0xNi44NzI4MzYtMTIuMDcxODk3LTQxLjU4ODcwOC02Ljg5NTIxNi02MS40MTQ0MTktMTAuMDIzODE1LTEyLjIxNDgyLTIuMjE5Nzg3LTIxLjQxODg0Nyw4LjMzNjM3My0yNS44NjQ1OC05LjYxMTI3MS0xLjQyNDc2LTIuODg1MjI3LjEwMTU0OS03Ljc3OTExLDQuNTAzNDg3LTcuNzYwMDg0LDQuMDE4MTQyLS4xNzc4MDksMjAuOTU3MzU2LS4wNjAwOTUsMjMuMzcyMjIyLS4xOTYzNDQsNS4wNTk3MiwzLjgzNjA5NCw5LjQ4Nzg1My4zMzcxMTIsMTUuODk2NTE1LjY1OTA0NSwyMC45MzIwOTktMi42MjY5MiwyMC4yNDM4ODQsMi4yMzA1NDQsNDAuNDQ0NTAxLTMuNTA2MzYxLDE2Ljk0NTgyNi01Ljk2NDA5MywzNC43NDE1NDMtMjMuNDQwMjg1LDQyLjg4MTkxMS00MC45OTc3MTcsNC45MTY0NC05LjExNzQxMSwyMS4xMjMwNzctMjAuMTIxOTI2LDMxLjU0NTU2OC05LjM0NDY4My0uMDAwNjkzLS4wMDAzMzksMTAuNjQ0NDAyLDE0LjA5ODE5NywxMC42NDQ0MDIsMTQuMDk4MTk3LDYuMzU2NjA2LTQuNzc2NTk1LS40NTk0NjMtMTQuODUwNzMyLDUuMTYyMDQtMjIuMzQwNTY0LDcuODY3NDI5LTUuNTY0MTY1LDE4LjQwMDEyNC0xLjQ1Nzk2MywyMi45MTAyODksMi40NTYxMDMsNC4wNjMzNTEsMi4yMTc1MzksNy4xODY5MjMtLjM0OTU4MSwxMS4yNjgyMDEtMS40MDYyMzksMTMuMTgwMjU5LTIuMDcxMjE1LDguMTAwOTg4LDkuODYwMjAxLDEwLjI4OTI4MSwyNC40NTkzNywxMC43Mjg4NzQtNS43NjQ5NTMtNS45ODEzODQtNDUuOTA2MTQ0LDIzLjM3NDI3My0zOS41NTI5NjcsMzAuNTA1MzAxLDYuOTc5MDMyLDU4LjkxOTgwOS0yNC4zMDcwMjksNzEuMzk5NTA2LTMuOTczNDA5LDMuNDg2MTY2LDEwLjExMDAwOC41ODExMTksMTAuMjI5NTkyLTMuMzQ2MTIxLDIwLjUyNzE0MS0xLjMwMDA3MSwzLjQxNzg5My0xLjY3MzkzNSw1LjAzNzc1Ni0zLjQ1NDA1Nyw2LjI4Mzg2My0yLjQ4MjEzOSwxLjI5MDMyOS0xMy42ODczOTEsNS42NDI0Ny03LjQ0MDY1NSwxMC40MTM5NSwxMy42MzU0MzEsMTQuMzc1MDgzLDI1LjA5MTI2OC0zLjkyNjI1MywzNy40ODkyNTMtLjYyMzk2OSwxMC42MTk5NTUsMy42MDUxMDEsMTMuMjAwMTU0LDkuNDEzMjQ4LDE0Ljc5MzY2MywxNi42OTc0OTkuNDAyNjA2LDguODE1OTkxLTYuMzA2NjUxLDE0LjEyMjQyOC0xMC4xMjk4ODIsMjIuNjQzODQ0LDEzLjE4NzEwNyw3Ljc4NzkwMywyOC4wNzAwNzItMS43OTEyNzQsNDAuNDI2NjcxLTEuMDMwOTY5LDIwLjY2ODk3LDEuNDk3MDkzLDI1Ljc4NjM3MywyNS44NTc0NzEsMTguOTIyNjQ1LDM2LjI3NzQ3MloiLz4KICAgIDxwYXRoIGNsYXNzPSJzdDEiIGQ9Ik0xOTIuOTkwMjI1LDMzOS41ODAwMTdjLTMuNjA5OTg1LTQuMDIwMDItOC4yMjAwMzItNi4wMzAwMjktMTMuODA5OTk4LTYuMDMwMDI5LTUuNzAwMDEyLDAtMTAuMzY5OTk1LDIuMDEwMDEtMTQuMDIwMDIsNi4wMzAwMjktMy42NDk5NjMsNC4wMjk5NjgtNS40Njk5NzEsOS42NTAwMjQtNS40Njk5NzEsMTYuODY5OTk1LDAsNy4xOTAwMDIsMS44MjAwMDcsMTIuNzk5OTg4LDUuNDQ5OTUxLDE2Ljg0MDAyNywzLjY0MDAxNSw0LjAyOTk2OCw4LjI3MDAyLDYuMDQ5OTg4LDEzLjg5MDAxNSw2LjA0OTk4OCw1LjY3MDA0NCwwLDEwLjMwOTk5OC0yLjAxMDAxLDEzLjk0MDAwMi02LjAzMDAyOSwzLjYxOTk5NS00LjAyOTk2OCw1LjQyOTk5My05LjY0OTk2Myw1LjQyOTk5My0xNi44NTk5ODUsMC03LjIxOTk3MS0xLjc5OTk4OC0xMi44NDAwMjctNS40MDk5NzMtMTYuODY5OTk1Wk04NS45NjAxOTYsNDk2LjIzOTk5bDQuMDUwMDQ5LDE5LjA3MDAwNywyMy42NDk5NjMtMTUuMjI5OTgtMjcuNzAwMDEyLTMuODQwMDI3Wk0xMzguODQwMjAxLDU3MS42OTAwMDJsLTcuNTI5OTY4LTE2LjI1LTE3LjY3OTk5Myw4LjE5MDAwMiw3LjAzOTk3OCwxNS4yMDAwMTJjMS45NjAwMjIsNC4yMjk5OCw0LjA0OTk4OCw2Ljk4OTk5LDYuMjcwMDIsOC4yNzk5NjgsMi4yMDk5NjEsMS4yOTAwMzksNC45NTk5NjEsMS4xODAwNTQsOC4yMjk5OC0uMzM5OTY2LDUuODQ5OTc2LTIuNzEwMDIyLDcuMDcwMDA3LTcuNzM5OTksMy42Njk5ODMtMTUuMDgwMDE3Wk0xNzcuNDgwMjE2LDYzMi42MDk5ODVjLTMuNTEwMDEtNC40ODk5OS03Ljk2OTk3MS02LjkyOTk5My0xMy4zOTAwMTUtNy4zMTk5NDYtNS40MDk5NzMtLjQwMDAyNC0xMC45NTk5NjEsMS42Mjk5NDQtMTYuNjQ5OTYzLDYuMDc5OTU2LTUuNjYwMDM0LDQuNDI5OTkzLTguOTYwMDIyLDkuMzIwMDA3LTkuOTAwMDI0LDE0LjY3MDA0NC0uOTQwMDAyLDUuMzQ5OTc2LjMzMDAxNywxMC4yMzk5OSwzLjc4OTk3OCwxNC42Njk5ODMsMy41LDQuNDU5OTYxLDcuOTQwMDAyLDYuODgwMDA1LDEzLjM0MDAyNyw3LjI2MDAxLDUuNDAwMDI0LjM2OTk5NSwxMC45NTAwMTItMS42NzAwNDQsMTYuNjMwMDA1LTYuMTE5OTk1LDUuNjkwMDAyLTQuNDUwMDEyLDktOS4zMzAwMTcsOS45NDAwMDItMTQuNjUwMDI0cy0uMzA5OTk4LTEwLjE5MDAwMi0zLjc2MDAxLTE0LjU5MDAyN1pNMTg3LjA3MDI0Miw2ODUuNDEwMDM0bDE0LjMyOTk1NiwxMy4yMDk5NjEsMTAuNDg5OTktMjYuMDk5OTc2LTI0LjgxOTk0NiwxMi44OTAwMTVaTTM2NC45NjAxOTYsNzUxLjM1MDAzN2wtMTcuNDY5OTcxLTMuOTMwMDU0LTQuMjcwMDIsMTkuMDIwMDIsMTYuMzQwMDI3LDMuNjY5OTgzYzQuNTQ5OTg4LDEuMDIwMDIsOC4wMTAwMSwxLjA1MDA0OSwxMC4zOTAwMTUuMDcwMDA3LDIuMzY5OTk1LS45Njk5NzEsMy45NDk5NTEtMy4yMTk5NzEsNC43Mzk5OS02LjczOTk5LDEuNDA5OTczLTYuMjg5OTc4LTEuODMwMDE3LTEwLjMyMDAwNy05LjczMDA0Mi0xMi4wODk5NjZaTTQxMi4wMDAyMzUsNzU4Ljc2MDAxbC0xMS4wNzAwMDcsMjUuNjc5OTkzLDE5LjQ1OTk2MSwxLjE2OTk4My04LjM4OTk1NC0yNi44NDk5NzZaTTc0OC4yOTAyMTMsNTA5LjIxMDAyMmwyMy4zNjk5OTUsMTUuMzQ5OTc2LDQuNTIwMDItMTguOTU5OTYxLTI3Ljg5MDAxNSwzLjYwOTk4NVpNNDAwLjkzMDIyOCw3ODQuNDQwMDAybDE5LjQ1OTk2MSwxLjE2OTk4My04LjM4OTk1NC0yNi44NDk5NzYtMTEuMDcwMDA3LDI1LjY3OTk5M1pNMjAxLjQwMDE5OCw2OTguNjE5OTk1bDEwLjQ4OTk5LTI2LjA5OTk3Ni0yNC44MTk5NDYsMTIuODkwMDE1LDE0LjMyOTk1NiwxMy4yMDk5NjFaTTE3OS4wMzAyMDMsMzc5LjM0MDAyN2M1LjY3MDA0NCwwLDEwLjMwOTk5OC0yLjAxMDAxLDEzLjk0MDAwMi02LjAzMDAyOSwzLjYxOTk5NS00LjAyOTk2OCw1LjQyOTk5My05LjY0OTk2Myw1LjQyOTk5My0xNi44NTk5ODUsMC03LjIxOTk3MS0xLjc5OTk4OC0xMi44NDAwMjctNS40MDk5NzMtMTYuODY5OTk1LTMuNjA5OTg1LTQuMDIwMDItOC4yMjAwMzItNi4wMzAwMjktMTMuODA5OTk4LTYuMDMwMDI5LTUuNzAwMDEyLDAtMTAuMzY5OTk1LDIuMDEwMDEtMTQuMDIwMDIsNi4wMzAwMjktMy42NDk5NjMsNC4wMjk5NjgtNS40Njk5NzEsOS42NTAwMjQtNS40Njk5NzEsMTYuODY5OTk1LDAsNy4xOTAwMDIsMS44MjAwMDcsMTIuNzk5OTg4LDUuNDQ5OTUxLDE2Ljg0MDAyNywzLjY0MDAxNSw0LjAyOTk2OCw4LjI3MDAyLDYuMDQ5OTg4LDEzLjg5MDAxNSw2LjA0OTk4OFpNMTY0LjA5MDIwMSw2MjUuMjkwMDM5Yy01LjQwOTk3My0uNDAwMDI0LTEwLjk1OTk2MSwxLjYyOTk0NC0xNi42NDk5NjMsNi4wNzk5NTYtNS42NjAwMzQsNC40Mjk5OTMtOC45NjAwMjIsOS4zMjAwMDctOS45MDAwMjQsMTQuNjcwMDQ0LS45NDAwMDIsNS4zNDk5NzYuMzMwMDE3LDEwLjIzOTk5LDMuNzg5OTc4LDE0LjY2OTk4MywzLjUsNC40NTk5NjEsNy45NDAwMDIsNi44ODAwMDUsMTMuMzQwMDI3LDcuMjYwMDEsNS40MDAwMjQuMzY5OTk1LDEwLjk1MDAxMi0xLjY3MDA0NCwxNi42MzAwMDUtNi4xMTk5OTUsNS42OTAwMDItNC40NTAwMTIsOS05LjMzMDAxNyw5Ljk0MDAwMi0xNC42NTAwMjRzLS4zMDk5OTgtMTAuMTkwMDAyLTMuNzYwMDEtMTQuNTkwMDI3Yy0zLjUxMDAxLTQuNDg5OTktNy45Njk5NzEtNi45Mjk5OTMtMTMuMzkwMDE1LTcuMzE5OTQ2WiIvPgogIDwvZz4KICA8cGF0aCBjbGFzcz0ic3QxIiBkPSJNOTMxLjQ1MDI0NywyMy4xNDAwMTVoLTQ5OS40NTAwMTJDMjA2LjU1MDIyMywyMy4xNDAwMTUsMjMuMTQwMTg5LDIwNi41NDk5ODgsMjMuMTQwMTg5LDQzMnMxODMuNDEwMDM0LDQwOC44NTk5ODUsNDA4Ljg2MDA0Niw0MDguODU5OTg1LDQwOC44ODAwMDUtMTgzLjQwOTk3Myw0MDguODgwMDA1LTQwOC44NTk5ODVjMC05NS42MzAwMDUtMzMuNzIwMDMyLTE4OC42NDAwMTUtOTQuOTIwMDQ0LTI2MS45MDk5NzNsLTE1Ljg1OTk4NS0xOC45ODk5OWgyMDEuMzUwMDM3VjIzLjE0MDAxNVpNNDgxLjU4MDE5MSw1Ni40NTAwMTJsMTIuMDEwMDEsMjguNzEwMDIyLDIxLjI1LTIyLjY3OTk5Myw4Ljk4MDA0MiwxLjYyOTk0NC0yNy43NjAwMSwyOC4xODAwNTQtNC4yODAwMjksMjMuNjI5OTQ0LTcuMzkwMDE1LTEuMzM5OTY2LDQuMjkwMDM5LTIzLjYzMDAwNS0xNi4wODAwMTctMzYuMTMwMDA1LDguOTc5OTgsMS42MzAwMDVaTTQyMS4zMDAyMjMsNTNsNDQuODgwMDA1LDEuNDEwMDM0LS4yMTAwMjIsNi43Mjk5OC0xOC43NS0uNTkwMDI3LTEuNTcwMDA3LDQ5Ljk0MDAwMi03LjUzOTk3OC0uMjM5OTksMS41NzAwMDctNDkuOTQwMDAyLTE4LjU5MDAyNy0uNTg5OTY2LjIxMDAyMi02LjcyMDAzMlpNNDA5LjQ3MDIwNiw1NC4xNzk5OTNsNC4wMTAwMSw1Ni41NTAwNDktNy41MjAwMi41Mzk5NzgtNC4wMDk5NDktNTYuNTQ5OTg4LDcuNTE5OTU4LS41NDAwMzlaTTM0Ny4wNzAyNDIsNzAuMDU5OTk4YzMuNzE5OTcxLTYuMDcwMDA3LDkuNTE5OTU4LTkuODQ5OTc2LDE3LjM5OTk2My0xMS4zMzk5NjYsNi4wNTk5OTgtMS4xNDAwMTUsMTEuNTIwMDItLjQ4MDA0MiwxNi4zOTAwMTUsMS45Nzk5OCw0Ljg4MDAwNSwyLjQ2OTk3MSw4LjA5MDAyNyw2LjMyMDAwNyw5LjYzMDAwNSwxMS41NzAwMDdsLTcuNjAwMDM3LDEuNDI5OTkzYy0uOTY5OTcxLTMuNDYwMDIyLTMuMDI5OTY4LTUuOTY5OTcxLTYuMTY5OTgzLTcuNTMwMDI5LTMuMTQwMDE1LTEuNTU5OTk4LTYuNzk5OTg4LTEuOTM5OTQxLTEwLjk3OTk4LTEuMTQ5OTYzLTUuNjUwMDI0LDEuMDU5OTk4LTkuNzUsMy44NDk5NzYtMTIuMzA5OTk4LDguMzY5OTk1LTIuNTU5OTk4LDQuNTEwMDEtMy4xNjAwMzQsMTAuMzY5OTk1LTEuNzkwMDM5LDE3LjU5MDAyNywxLjM2MDA0Niw3LjE5OTk1MSw0LjA0MDAzOSwxMi40Mzk5NDEsOC4wNDAwMzksMTUuNzE5OTcxLDQuMDEwMDEsMy4yODAwMjksOC44MDk5OTgsNC40MDAwMjQsMTQuNDA5OTczLDMuMzQwMDI3LDQuMzYwMDQ2LS44MzAwMTcsNy42Nzk5OTMtMi41NTk5OTgsOS45NjAwMjItNS4xOTAwMDIsMi4yNzk5NjgtMi42NDAwMTUsMy4yMjk5OC01Ljk2MDAyMiwyLjgzOTk2Ni05Ljk4MDA0Mmw3LjYwMDAzNy0xLjQ0MDAwMmMuNTgwMDE3LDYuMDMwMDI5LS44ODAwMDUsMTEuMDU5OTk4LTQuNDAwMDI0LDE1LjA4MDAxNy0zLjUxMDAxLDQuMDIwMDItOC40MTk5ODMsNi42MzAwMDUtMTQuNzI5OTgsNy44MjAwMDctNy44ODAwMDUsMS40ODk5OS0xNC42NTk5NzMuMDg5OTY2LTIwLjM0MDAyNy00LjIxMDAyMi01LjY3OTk5My00LjI4OTk3OC05LjM0OTk3Ni0xMC44NDk5NzYtMTEuMDE5OTU4LTE5LjcwMDAxMi0xLjY3MDA0NC04LjgzOTk2Ni0uNjUwMDI0LTE2LjI4OTk3OCwzLjA3MDAwNy0yMi4zNTk5ODVaTTIxNi4xNDAxODksMzI4LjEwMDAzN2gzOC4yNXY2LjcyOTk4aC0zMC43NXYxNy41NDk5ODhoMjYuNjUwMDI0djYuNzI5OThoLTI2LjY1MDAyNHYyNS42ODAwNTRoLTcuNXYtNTYuNjkwMDAyWk0xNTkuNTQwMjEzLDMzNS4xNzk5OTNjNS4wNzAwMDctNS4zNjk5OTUsMTEuNTk5OTc2LTguMDQ5OTg4LDE5LjU1OTk5OC04LjA0OTk4OCw3Ljk0MDAwMiwwLDE0LjQ0MDAwMiwyLjY3OTk5MywxOS40ODk5OSw4LjA0OTk4OCw1LjA1OTk5OCw1LjM2MDA0Niw3LjU4MDAxNywxMi40NTAwMTIsNy41ODAwMTcsMjEuMjcwMDIsMCw4LjgwOTk5OC0yLjUyMDAyLDE1LjkwMDAyNC03LjU4MDAxNywyMS4yNjAwMS01LjA0OTk4OCw1LjM2OTk5NS0xMS41NDk5ODgsOC4wNDk5ODgtMTkuNDg5OTksOC4wNDk5ODgtNy45NjAwMjIsMC0xNC40ODk5OS0yLjY5MDAwMi0xOS41NTk5OTgtOC4wNTk5OTgtNS4wODAwMTctNS4zODAwMDUtNy42MTk5OTUtMTIuNDYwMDIyLTcuNjE5OTk1LTIxLjI1LDAtOC44MjAwMDcsMi41Mzk5NzgtMTUuOTA5OTczLDcuNjE5OTk1LTIxLjI3MDAyWk01Ni45MTAyMDgsNDM5LjA0OTk4OGw1Ni41ODAwMTctMy40ODk5OSwyLjM1OTk4NSwzOC4xNzk5OTMtNi43MTk5NzEuNDEwMDM0LTEuODkwMDE1LTMwLjY5MDAwMi0xNy41MjAwMiwxLjA4MDAxNywxLjYzMDAwNSwyNi41OTk5NzYtNi43MTAwMjIuNDA5OTczLTEuNjM5OTU0LTI2LjU4OTk2Ni0yNS42MzAwMDUsMS41ODAwMTctLjQ2MDAyMi03LjQ5MDA1MVpNNjkuMTQwMTg5LDUyOC43MjAwMzJsMTUuNTEwMDEtMTAuMDIwMDItNC45NDAwMDItMjMuMjE5OTcxLTE4LjE2OTk4My0yLjU1MDA0OS0xLjY1MDAyNC03Ljc1LDU5Ljk4MDA0Miw5LjUxMDAxLDEuNjc5OTkzLDcuOTAwMDI0LTUwLjY1MDAyNCwzNC40MDk5NzMtMS43NjAwMS04LjI3OTk2OFpNNzQuODEwMjMzLDU0Ni42NjAwMzRsNTMuODI5OTU2LTE3Ljc3MDAyLDIuMzcwMDU2LDcuMTU5OTczLTUzLjg0MDAyNywxNy43NzAwMi0yLjM1OTk4NS03LjE1OTk3M1pNMTE5LjUwMDIzNSw1ODguNTMwMDI5bC0uMTQwMDE1LjA3MDAwN2MuNTEwMDEsNC4xMDk5ODUtMS4zMzAwMTcsOC4yNjk5NTgtNS41MTAwMSwxMi40Nzk5OGwtMTEuNjE5OTk1LDExLjY1MDAyNC0zLjQwOTk3My03LjM3MDA1NiwxMS40Nzk5OC0xMS4xOTk5NTFjMi4wMjk5NjgtMS45OTAwNTEsMy4zNDk5NzYtNC4zNTAwMzcsMy45NjAwMjItNy4wODAwMTcuNjA5OTg1LTIuNzI5OTguMzA5OTk4LTUuNDAwMDI0LS45MDAwMjQtOC4wMjAwMmwtNS44NDAwMjctMTIuNTk5OTc2LTIyLDEwLjIwMDAxMi0zLjE0OTk2My02LjgwOTk5OCw1MS40NDAwMDItMjMuODMwMDE3LDEwLjU0OTk4OCwyMi43NzAwMmMxLjg0MDAyNywzLjk3OTk4LDIuOTYwMDIyLDcuNDA5OTczLDMuMzU5OTg1LDEwLjI4OTk3OC40MDAwMjQsMi44ODAwMDUtLjI2OTk1OCw1LjcwMDAxMi0yLjAxMDAxLDguNDQwMDAyLTEuNzUsMi43Mzk5OS00LjE2OTk4Myw0LjgzMDAxNy03LjI4OTk3OCw2LjI3MDAyLTMuNTQ5OTg4LDEuNjQ5OTYzLTcsMS45ODk5OS0xMC4zNDAwMjcsMS4wMzk5NzgtMy4zMzk5NjYtLjk1MDAxMi02LjE5OTk1MS0zLjA0OTk4OC04LjU3OTk1Ni02LjI5OTk4OFpNMTU0LjY3MDIxOCw2NzUuMTA5OTg1Yy03LjM0MDAyNy0uNjY5OTgzLTEzLjQ1MDAxMi00LjEyOTk0NC0xOC4zNDk5NzYtMTAuMzg5OTU0LTQuOTEwMDM0LTYuMjcwMDItNi44MDk5OTgtMTMuMDU5OTk4LTUuNzEwMDIyLTIwLjM4MDAwNSwxLjEwOTk4NS03LjMwOTk5OCw1LjExOTk5NS0xMy42NzAwNDQsMTIuMDM5OTc4LTE5LjA5MDAyNyw2Ljk1MDAxMi01LjQ0MDAwMiwxNC4wOTAwMjctNy44MDk5OTgsMjEuNDUwMDEyLTcuMTA5OTg1LDcuMzUwMDM3LjY5MDAwMiwxMy40Nzk5OCw0LjE3OTk5MywxOC4zOTAwMTUsMTAuNDUwMDEyLDQuODk5OTYzLDYuMjUsNi43ODk5NzgsMTMuMDE5OTU4LDUuNjc5OTkzLDIwLjMwOTk5OC0xLjEwOTk4NSw3LjI3OTk2OC01LjEzMDAwNSwxMy42NDAwMTUtMTIuMDgwMDE3LDE5LjA3MDAwNy02Ljk0MDAwMiw1LjQ0MDAwMi0xNC4wNzk5NTYsNy44MjAwMDctMjEuNDE5OTgzLDcuMTM5OTU0Wk0xOTIuMTMwMjQsNzIxLjYzMDAwNWw2Ljg1OTk4NS0xNy4xNDAwMTUtMTcuNDYwMDIyLTE2LjA4OTk2Ni0xNi4yOTk5ODgsOC40NDAwMDItNS44MzAwMTctNS4zNjk5OTUsNTQuNDI5OTkzLTI2Ljk0MDAwMiw1Ljk0MDAwMiw1LjQ3OTk4LTIxLjQwOTk3Myw1Ny4zNTk5ODUtNi4yMjk5OC01LjczOTk5Wk0yMzcuMTQwMTg5LDc1My45NzAwMzJsLS44Mjk5NTYtMzQuNjc5OTkzLTEyLjEzMDAwNSwyLjIwOTk2MS0xMS4wMTAwMSwxNi4yNzAwMi02LjIxMDAyMi00LjIwMDAxMiwzMS43NS00Ni45Njk5NzEsNi4yMjAwMzIsNC4yMDk5NjEtMTUuNzUsMjMuMjkwMDM5LDM4LjY0OTk2My03LjgwOTk5OCw4LjQwMDAyNCw1LjY3OTk5My0zMi43MTAwMjIsNS45Nzk5OCwxLjgyMDAwNyw0MS41NzAwMDctOC4yMDAwMTItNS41NDk5ODhaTTMwOS41MDAyMzUsNzQ1LjM1OTk4NWwtNi42MDAwMzctMy4xMjk5NDRjMi4yNjAwMS02LjUyMDAyLS41MTAwMS0xMS42MjAwNTYtOC4zMjAwMDctMTUuMzIwMDA3LTMuNzY5OTU4LTEuNzkwMDM5LTcuMDI5OTY4LTIuNDcwMDMyLTkuNzc5OTY4LTIuMDMwMDI5LTIuNzM5OTkuNDQwMDAyLTQuNjc5OTkzLDEuODMwMDE3LTUuNzg5OTc4LDQuMTkwMDAyLTEuMDIwMDIsMi4xNDAwMTUtLjk1MDAxMiw0LjE0MDAxNS4yMDk5NjEsNiwxLjE2MDAzNCwxLjg1OTk4NSwzLjc4MDAyOSw0LjM4MDAwNSw3Ljg1OTk4NSw3LjUzOTk3OCw0LjA4MDAxNywzLjE2MDAzNCw3LjIyMDAzMiw1Ljg2MDA0Niw5LjQ0MDAwMiw4LjExMDA0NiwyLjIxMDAyMiwyLjI1LDMuNzkwMDM5LDQuODU5OTg1LDQuNzIwMDMyLDcuODIwMDA3LjkyOTk5MywyLjk2OTk3MS41ODAwMTcsNi4xOTAwMDItMS4wNzAwMDcsOS42NTk5NzMtMi4wOTAwMjcsNC40MDAwMjQtNS41NzAwMDcsNy4yMjk5OC0xMC40NjAwMjIsOC40Nzk5OC00Ljg4OTk1NCwxLjI1LTEwLjE0OTk2My41NDAwMzktMTUuNzg5OTc4LTIuMTMwMDA1LTcuMjE5OTcxLTMuNDI5OTkzLTExLjg0OTk3Ni03LjYwOTk4NS0xMy44OTAwMTUtMTIuNTM5OTc4LTIuMDM5OTc4LTQuOTI5OTkzLTEuOTUwMDEyLTkuOTc5OTguMjcwMDItMTUuMTUwMDI0bDYuNTM5OTc4LDMuMTAwMDM3Yy0xLjQ2OTk3MSwzLjk3OTk4LTEuMjE5OTcxLDcuNTU5OTk4Ljc1LDEwLjcyOTk4LDEuOTYwMDIyLDMuMTY5OTgzLDQuOTUwMDEyLDUuNzEwMDIyLDguOTUwMDEyLDcuNjA5OTg1LDMuNzk5OTg4LDEuODAwMDQ5LDcuMjI5OTgsMi40NzAwMzIsMTAuMjg5OTc4LDIuMDEwMDEsMy4wNTAwNDktLjQ2OTk3MSw1LjIyMDAzMi0yLjAzOTk3OCw2LjQ5MDA1MS00LjcxOTk3MSwxLjMyOTk1Ni0yLjgwOTk5OCwxLjEwOTk4NS01LjQyOTk5My0uNjkwMDAyLTcuODUwMDM3LTEuNzkwMDM5LTIuNDE5OTgzLTUuMzIwMDA3LTUuNjM5OTU0LTEwLjU5MDAyNy05LjY2OTk4My01LjI2MDAxLTQuMDIwMDItOC42NTAwMjQtNy43Mzk5OS0xMC4xNTAwMjQtMTEuMTY5OTgzLTEuNS0zLjQxOTk4My0xLjM3OTk0NC02Ljk3MDAzMi4zNzAwNTYtMTAuNjUwMDI0LDEuOTU5OTYxLTQuMTQ5OTYzLDUuMjI5OTgtNi43NjAwMSw5LjgwOTk5OC03LjgzOTk2Niw0LjU3OTk1Ni0xLjA5MDAyNyw5LjYxOTk5NS0uMzIwMDA3LDE1LjExOTk5NSwyLjI3OTk2OCw1Ljc2OTk1OCwyLjczOTk5LDkuNzk5OTg4LDYuMjkwMDM5LDEyLjA3MDAwNywxMC42NTAwMjQsMi4yNjk5NTgsNC4zNTk5ODUsMi4zNDk5NzYsOS4wMjk5NjguMjM5OTksMTQuMDE5OTU4Wk0zODIuMjQwMjI1LDc2NS4xNDAwMTVjLS44NTk5ODUsMy44MjAwMDctMi42OTAwMDIsNi43NzAwMi01LjQ3OTk4LDguODMwMDE3LTIuNzkwMDM5LDIuMDcwMDA3LTYuMTkwMDAyLDMuMDU5OTk4LTEwLjIyMDAzMiwyLjk3OTk4bC0uMDI5OTY4LjE1MDAyNGMzLjU2OTk0NiwyLjA5OTk3Niw1Ljc1LDYuMDg5OTY2LDYuNTQ5OTg4LDExLjk3OTk4bDIuMTU5OTczLDE2LjI5OTk4OC03LjkxOTk4My0xLjc3OTk2OC0xLjkwMDAyNC0xNS45MzAwNTRjLS4zMzk5NjYtMi44MTk5NDYtMS40MDk5NzMtNS4zMDk5OTgtMy4xOTk5NTEtNy40NDk5NTEtMS43OTAwMzktMi4xNTAwMjQtNC4wOTAwMjctMy41NDAwMzktNi45MTAwMzQtNC4xNzAwNDRsLTEzLjUzOTk3OC0zLjAzOTk3OC01LjMyMDAwNywyMy42NTAwMjQtNy4zMjAwMDctMS42NDAwMTUsMTIuNDI5OTkzLTU1LjMyMDAwNywyNC40Nzk5OCw1LjVjNC4yODAwMjkuOTYwMDIyLDcuNjgwMDU0LDIuMTY5OTgzLDEwLjIxMDAyMiwzLjYwOTk4NSwyLjUzMDAyOSwxLjQ0MDAwMiw0LjM0OTk3NiwzLjY3OTk5Myw1LjQ3MDAzMiw2LjczMDA0MiwxLjEwOTk4NSwzLjA0OTk4OCwxLjI4OTk3OCw2LjI1LjUzOTk3OCw5LjU5OTk3NlpNNDI3Ljc3MDE5NCw4MDkuMjkwMDM5bC01LjUzOTk3OC0xNy42MTAwNDYtMjMuNzAwMDEyLTEuNDA5OTczLTcuMjc5OTY4LDE2LjgzOTk2Ni03LjkxMDAzNC0uNDY5OTcxLDI1LjExMDA0Ni01NS4yOTk5ODgsOC4wNjk5NDYuNDc5OTgsMTkuNzAwMDEyLDU3Ljk3OTk4LTguNDUwMDEyLS41MDk5NDlaTTQ4My43NDAyMjUsODA1LjU0OTk4OGwtMzQuMDMwMDI5LTQxLjUzOTk3OCw0LjQ4MDA0Miw0NC41MjAwMi03LjA4MDAxNy43MDk5NjEtNS42Nzk5OTMtNTYuNDA5OTczLDcuNjE5OTk1LS43NjAwMSwzNC4wMjk5NjgsNDEuNTM5OTc4LTQuNDc5OTgtNDQuNTE5OTU4LDcuMTE5OTk1LS43MTAwMjIsNS42Nzk5OTMsNTYuNDAwMDI0LTcuNjU5OTczLjc2OTk1OFpNNTQ1LjgxMDIzMyw3ODcuMjMwMDQyYy0zLjE3OTk5Myw0LjI4OTk3OC03Ljg1OTk4NSw3LjI4OTk3OC0xNC4wNDk5ODgsOC45ODk5OS03LjczMDA0MiwyLjExOTk5NS0xNC42MDAwMzcsMS4yNzk5NjgtMjAuNjEwMDQ2LTIuNTQwMDM5cy0xMC4xOTk5NTEtMTAuMDU5OTk4LTEyLjU4OTk2Ni0xOC43Mzk5OWMtMi4zODAwMDUtOC42Nzk5OTMtMS45NjAwMjItMTYuMTkwMDAyLDEuMjUtMjIuNTM5OTc4LDMuMjE5OTcxLTYuMzUwMDM3LDguNjkwMDAyLTEwLjU5MDAyNywxNi40MTk5ODMtMTIuNzEwMDIyLDUuOTUwMDEyLTEuNjMwMDA1LDExLjQ0MDAwMi0xLjQxOTk4MywxNi41LjY0MDAxNXM4LjU3MDAwNyw1LjY0MDAxNSwxMC41MzAwMjksMTAuNzM5OTlsLTcuNDYwMDIyLDIuMDQ5OTg4Yy0xLjIzOTk5LTMuMzY5OTk1LTMuNS01LjcwOTk2MS02Ljc1LTcuMDEwMDEtMy4yNjAwMS0xLjI4OTk3OC02Ljk0MDAwMi0xLjM3OTk0NC0xMS4wMzk5NzgtLjI1LTUuNTUwMDQ5LDEuNTIwMDItOS40MTAwMzQsNC42MzAwMDUtMTEuNTkwMDI3LDkuMzQwMDI3LTIuMTkwMDAyLDQuNzAwMDEyLTIuMzA5OTk4LDEwLjU5MDAyNy0uMzU5OTg1LDE3LjY3OTk5MywxLjk0MDAwMiw3LjA1OTk5OCw1LjAzOTk3OCwxMi4wNTk5OTgsOS4yOTk5ODgsMTUuMDEwMDEsNC4yNSwyLjk1MDAxMiw5LjEzMDAwNSwzLjY2OTk4MywxNC42MzAwMDUsMi4xNTk5NzMsNC4yNzAwMi0xLjE2OTk4Myw3LjQ0MDAwMi0zLjE2OTk4Myw5LjUtNS45Nzk5OHMyLjczOTk5LTYuMjAwMDEyLDIuMDIwMDItMTAuMTc5OTkzbDcuNDU5OTYxLTIuMDQ5OTg4YzEuMDcwMDA3LDUuOTU5OTYxLjAyMDAyLDExLjA4OTk2Ni0zLjE1OTk3MywxNS4zOTAwMTVaTTYwMS40ODAyMTYsNzY4LjE5MDAwMmwtMTEuMjI5OTgtMjQuMjAwMDEyLTI2LjczMDA0MiwxMi40MTAwMzQsMTEuMjQwMDUxLDI0LjIwMDAxMi02LjgwOTk5OCwzLjE1OTk3My0yMy44NzAwNTYtNTEuNDE5OTgzLDYuODAwMDQ5LTMuMTYwMDM0LDkuODA5OTk4LDIxLjExMDA0NiwyNi43MTk5NzEtMTIuNDAwMDI0LTkuNzk5OTg4LTIxLjExOTk5NSw2Ljg0MDAyNy0zLjE3OTk5MywyMy44Njk5OTUsNTEuNDI5OTkzLTYuODQwMDI3LDMuMTY5OTgzWk00MzIuMDAwMjM1LDY5Mi42Nzk5OTNjLTEzOS44NjAwNDYsMC0yNTQuMzQwMDI3LTExMC43MTk5NzEtMjYwLjQyOTk5My0yNDkuMTA5OTg1aDE1My43OTk5ODh2LTUyLjgzMDAxN2M0Ljg1OTk4NS0yLjIwOTk2MSw4LjM4MDAwNS0zLjg5OTk2MywxMC4yNS00Ljk2OTk3MS42MzAwMDUtLjM1OTk4NSwyLjg2OTk5NS0xLjY2MDAzNCw0LjIzOTk5LS43OTk5ODgsMy4zODAwMDUsNS4zMzk5NjYsMTAuMzMwMDE3LDcuNSwxNi44MjAwMDcsOS4wMzk5NzgsMS44OTAwMTUuNzk5OTg4LDguMTkwMDAyLDMuMjM5OTksMTQuOTg5OTkuNjU5OTczLDkuMTUwMDI0LTIuOTA5OTczLDE3Ljc4MDAyOS0xOS4yNSwyNi40MTk5ODMtMTguNjg5OTQxLDUuMTE5OTk1LDIuNTM5OTc4LDYuODY5OTk1LDcuMzQ5OTc2LDEwLjc1LDExLjEyOTk0NCwxNi4wODAwMTcsOC44NzAwNTYsMTcuNjYwMDM0LTYuNjI5OTQ0LDE4LjA5MDAyNy0xOC4yNSwxLjE1OTk3My03LjU5OTk3NiwxMS44NTk5ODUtMTQuNTc5OTU2LDE3LjcyOTk4LTYuMjI5OTgsNi4yMTAwMjIsNy45MDAwMjQsMTUuMDIwMDIsMzEuNjMwMDA1LDI0LjE2OTk4MywzMi42NTAwMjQsMTAuMjQwMDUxLjE1OTk3MywxMi43MzAwNDItNy4yMzAwNDIsMTMtMTIuMzIwMDA3LDEuMDMwMDI5LTkuNDQwMDAyLTMuNDY5OTcxLTE2LjcyMDAzMiw1LjAzMDAyOS0yNS41ODAwMTcsMTAuMjcwMDItNi45Nzk5OCwyMy41Mjk5NjgtLjM0OTk3NiwzMi45NDAwMDItMS4xMTk5OTUsMTAuODkwMDE1LjMyMDAwNywxNi4zNjk5OTUuNDc5OTgsMjAuMTU5OTczLTEuMTMwMDA1LDExLjkwMDAyNC00LjMzOTk2NiwxNC4xNTAwMjQsMy40Nzk5OCw3LjczMDA0MiwxMi4wMzk5NzgtNS45MDAwMjQsNi43OTAwMzktMTIuMjIwMDMyLDM0Ljg2MDA0Niw4LjczOTk5LDM0Ljc4MDAyOSwxMC40ODk5OS0xLjk2MDAyMiwxNi42Njk5ODMtOC4wODAwMTcsMjYuMDM5OTc4LTEyLjA5OTk3Niw1LjkwMDAyNC0xLjI3MDAyLDEwLjcyMDAzMiwzLjkyOTk5Myw4LjkwMDAyNCw4LjYwOTk4NS0yLjcyMDAzMiw2Ljc3OTk2OC0xMS43MTAwMjIsMTMuODMwMDE3LTguNjA5OTg1LDIxLjU4MDAxNywzLjUxOTk1OCw0LjE5OTk1MSwxMS44Nzk5NDQsMy45NDAwMDIsMTMuOTQ5OTUxLDMuMzM5OTY2LDQuODYwMDQ2LS44MDk5OTgsMTAuNDEwMDM0LTIuNDg5OTksMjAuNjE5OTk1LTEuMzk5OTYzLDIuNjcwMDQ0LjMxOTk0Niw2LjUzMDAyOSwxLjA0OTk4OCwxMS4wNTAwNDksMi44MDk5OTgsMjIuNTc5OTU2LDE1LjY5MDAwMiwzOC4yNjk5NTgsNC44Njk5OTUsNDMuNzU5OTQ5LTE5LjY1MDAyNCwxLjg2MDA0Ni0xMS4wNTk5OTgsMS44NTAwMzctMTkuMDgwMDE3LTUuMzM5OTY2LTI1LjQ0MDAwMi0xLjY2MDAzNC0uOTc5OTgtOS42Nzk5OTMtOS4xMzAwMDUtMTUuMjAwMDEyLTkuMjAwMDEyLTkuMDEwMDEuNTgwMDE3LTI4LjQxOTk4MywxMi40NjAwMjItMzQuMjAwMDEyLDQuODIwMDA3LTIuNTQ5OTg4LTIuOTUwMDEyLTEuODM5OTY2LTQuOTE5OTgzLDEuMTE5OTk1LTcuOTQwMDAyLDIuNzIwMDMyLTYuODk5OTYzLDcuODYwMDQ2LTE1LjMzMDAxNyw1Ljg2MDA0Ni0yMy40NDAwMDItMi43MzAwNDItNi44OTk5NjMtMTEuMTAwMDM3LTExLjU1OTk5OC0xNy45NTAwMTItOC43Mzk5OS03LjAxMDAxLDEuMzA5OTk4LTE3LjU0MDAzOSw5Ljk1MDAxMi0yMy42Njk5ODMsMy45MDk5NzMtLjgzMDAxNy0xMy4wNzk5NTYsMTIuNDA5OTczLTIxLjc1LDEyLjU0OTk4OC0zMi45Mjk5OTMtMS40NjAwMjItOC4wOTk5NzYtNy44OTAwMTUtMTEuOTc5OTgtMTQuNTQ5OTg4LTE0LjA3OTk1Ni0xMi4wMjAwMi0yLjI3MDAyLTEyLjkwMDAyNCwxMi43OTk5ODgtMjYuODQwMDI3LDEwLjUxOTk1OC0xMi4yODk5NzgtMy42Mzk5NTQtMzQuNTcwMDA3LTEzLTM4LjUtMTQuMTQ5OTYzLTguNzg5OTc4LTUuMzA5OTk4LTE0LjY5MDAwMiwxMC42MzAwMDUtMTUuMjgwMDI5LDExLjMzOTk2Ni01LjE1OTk3MywxMy4yMjAwMzItLjkzOTk0MSwxMy4yMDAwMTItNy4zNDk5NzYsMjMuODIwMDA3LTEuNzEwMDIyLDIuNDI5OTkzLTMuMTY5OTgzLDQuNjMwMDA1LTUuNDc5OTgsMi44MDk5OTgtNi4yMTAwMjItNC45Nzk5OC0zLjg0MDAyNy0yMS43NjAwMS0yMC4xNzAwNDQtMjYuMzMwMDE3LTcuMTk5OTUxLTEuNjkwMDAyLTE1LjE4OTk0MS44OTAwMTUtMTkuNTA5OTQ5LDEyLjIzMDA0Mi00LjgyMDAwNyw1LjY2OTk4My0xLjI1LDE5LjI2OTk1OC04LjkwMDAyNCwyMC43MDAwMTItOC4yMTk5NzEuNTg5OTY2LTYuNS0xOS41NzAwMDctMjMuNjU5OTczLTE1LjgwMDA0OS0zLjYxMDA0Ni45NTAwMTItNy41OTAwMjcsNi05LjA1OTk5OCw3Ljg2MDA0Ni0xLjg3MDA1NiwyLjc1OTk0OS03LjEwMDAzNyw4LjUyOTk2OC0yMC4xNzAwNDQsMjAuNzc5OTY4LTkuNDI5OTkzLDcuNDcwMDMyLTE2LjkyOTk5MywxNi44MDk5OTgtMjcuMjg5OTc4LDIyLjk3OTk4LTUuMzIwMDA3LDEuMTcwMDQ0LTMuODQwMDI3LTEuNTI5OTY4LTEwLjUzOTk3OC0xLjMzOTk2Ni03LjAzMDAyOSwxLjM5MDAxNS0xOS45MjAwNDQsMS4zMDk5OTgtMjIuNjQwMDE1LDEuMTU5OTczdi05OS4zNjk5OTVoLTk3LjA3MDAwN2M0OS4zMDk5OTgtNjEuNzI5OTgsMTIzLjkyOTk5My05Ny45ODk5OSwyMDMuNzAwMDEyLTk3Ljk4OTk5LDEyLjgyMDAwNywwLDI1LjcxOTk3MS45NDAwMDIsMzguMzI5OTU2LDIuNzg5OTc4LDEyNi43NjAwMSwxOC42ODAwNTQsMjIyLjM1MDAzNywxMjkuNTQwMDM5LDIyMi4zNTAwMzcsMjU3Ljg5MDAxNSwwLDE0My43Mzk5OS0xMTYuOTQwMDAyLDI2MC42Nzk5OTMtMjYwLjY3OTk5MywyNjAuNjc5OTkzWk02NDkuNTgwMTkxLDcxOS43MTAwMjJjLTEwLjAxOTk1OCwwLTE4LjE0OTk2My04LjE0MDAxNS0xOC4xNDk5NjMtMTguMTYwMDM0LDAtMTAuMDE5OTU4LDguMTMwMDA1LTE4LjE1OTk3MywxOC4xNDk5NjMtMTguMTU5OTczLDEwLjAzMDAyOSwwLDE4LjE2MDAzNCw4LjE0MDAxNSwxOC4xNjAwMzQsMTguMTU5OTczLDAsMTAuMDIwMDItOC4xMzAwMDUsMTguMTYwMDM0LTE4LjE2MDAzNCwxOC4xNjAwMzRaTTcxOS43MTAxOTYsNjczLjA5MDAyN2wtMzguNzA5OTYxLTMxLjU5MDAyNy0xMS43NjAwMSwxNC40MTAwMzQtNS4yMTAwMjItNC4yNSwyOC4zOTAwMTUtMzQuNzkwMDM5LDUuMjEwMDIyLDQuMjYwMDEtMTEuODYwMDQ2LDE0LjUzMDAyOSwzOC43MTAwMjIsMzEuNTg5OTY2LTQuNzcwMDIsNS44NDAwMjdaTTc0My4yNDAyMjUsNjQyLjYwOTk4NWwtNDguNjE5OTk1LTI5LjE1OTk3MywyMS4wNTk5OTgtMzUuMTE5OTk1LDUuNzcwMDIsMy40NjAwMjItMTcuMjAwMDEyLDI4LjY5MDAwMiwxNC44NTk5ODUsOC45MDk5NzMsMTYuMDkwMDI3LTI2LjgzMDAxNyw1Ljc2OTk1OCwzLjQ2MDAyMi0xNi4wODk5NjYsMjYuODMwMDE3LDE2LjQ0OTk1MSw5Ljg1OTk4NSwxNy44ODAwMDUtMjkuODA5OTk4LDUuNzcwMDIsMy40NTk5NjEtMjEuNzM5OTksMzYuMjVaTTc0Ny45OTAyMjUsNDU5LjY2OTk4M2MuNTEwMDEtNi4zNzk5NDQsMi4zOTk5NjMtMTEuMzk5OTYzLDUuNjU5OTczLTE1LjA2OTk0NiwzLjI3MDAyLTMuNjcwMDQ0LDcuNjEwMDQ2LTUuNDEwMDM0LDEzLjAzMDAyOS01LjIxMDAyMmwtLjU4MDAxNyw3LjI4OTk3OGMtNi44OTk5NjMuMjAwMDEyLTEwLjY5MDAwMiw0LjYwMDAzNy0xMS4zODAwMDUsMTMuMjEwMDIyLS4zMzAwMTcsNC4xNTk5NzMuMjAwMDEyLDcuNDUwMDEyLDEuNTkwMDI3LDkuODU5OTg1LDEuMzgwMDA1LDIuNDE5OTgzLDMuMzY5OTk1LDMuNzMwMDQyLDUuOTY5OTcxLDMuOTI5OTkzLDIuMzU5OTg1LjE5MDAwMiw0LjIxMDAyMi0uNTg5OTY2LDUuNTQwMDM5LTIuMzI5OTU2LDEuMzI5OTU2LTEuNzQwMDUxLDIuNzM5OTktNS4wODAwMTcsNC4yNS0xMC4wMjAwMiwxLjUtNC45NDAwMDIsMi45MDk5NzMtOC44NDAwMjcsNC4yMjk5OC0xMS43MTAwMjIsMS4zMDk5OTgtMi44Njk5OTUsMy4xOTAwMDItNS4yNjk5NTgsNS42MzAwMDUtNy4xOTAwMDIsMi40NTAwMTItMS45Mjk5OTMsNS41ODAwMTctMi43Mzk5OSw5LjQwOTk3My0yLjQ0MDAwMiw0Ljg2MDA0Ni4zOTAwMTUsOC43Mzk5OSwyLjY1MDAyNCwxMS42NDAwMTUsNi43NzAwMiwyLjkwOTk3Myw0LjExOTk5NSw0LjEwOTk4NSw5LjI5OTk4OCwzLjYxOTk5NSwxNS41MjAwMi0uNjQwMDE1LDcuOTU5OTYxLTIuODk5OTYzLDEzLjc3OTk2OC02Ljc3OTk2OCwxNy40NDAwMDItMy44OTAwMTUsMy42NTk5NzMtOC42NDAwMTUsNS4zNjk5OTUtMTQuMjYwMDEsNS4xMzAwMDVsLjU3MDAwNy03LjIxMDAyMmM0LjI1LS4wNDk5ODgsNy41LTEuNTU5OTk4LDkuNzY5OTU4LTQuNTIwMDIsMi4yNzAwMi0yLjk1OTk2MSwzLjU3MDAwNy02LjY0OTk2MywzLjkyOTk5My0xMS4wNzAwMDcuMzMwMDE3LTQuMTkwMDAyLS4yNTk5NDktNy42MzAwMDUtMS43Nzk5NjgtMTAuMzI5OTU2LTEuNTIwMDItMi42OTAwMDItMy43NjAwMS00LjE2MDAzNC02LjcxMDAyMi00LjM5MDAxNS0zLjEwOTk4NS0uMjUtNS40Nzk5OC44OTAwMTUtNy4wOTk5NzYsMy40Mjk5OTMtMS42MzAwMDUsMi41MzAwMjktMy4zODAwMDUsNi45Nzk5OC01LjI3MDAyLDEzLjMzMDAxNy0xLjg5MDAxNSw2LjM1OTk4NS00LjE2OTk4MywxMC44Mzk5NjYtNi44Mzk5NjYsMTMuNDU5OTYxLTIuNjYwMDM0LDIuNjE5OTk1LTYuMDIwMDIsMy43NzAwMi0xMC4wOTAwMjcsMy40NTAwMTItNC41NzAwMDctLjM2OTk5NS04LjE3OTk5My0yLjUtMTAuODA5OTk4LTYuMzkwMDE1LTIuNjQwMDE1LTMuODk5OTYzLTMuNzE5OTcxLTguODc5OTQ0LTMuMjM5OTktMTQuOTQwMDAyWk03NDIuMjQwMjI1LDUwMy41NDk5ODhsNjAuNTEwMDEtOS4zNDk5NzYtMS45NjAwMjIsOC4yMzk5OS0xOC4yOTk5ODgsMi4zOTAwMTUtNS41MTAwMSwyMy4wOTk5NzYsMTUuMzMwMDE3LDEwLjEwMDAzNy0xLjg0MDAyNyw3LjcwOTk2MS01MC4wOTk5NzYtMzQuMzI5OTU2LDEuODY5OTk1LTcuODYwMDQ2Wk03MzIuMjEwMTk2LDUzOS4yOTAwMzlsMy40NjAwMjItOC40ODAwNDIsMTcuNDAwMDI0LDI4LjM2OTk5NSwzNS44OTk5NjMtOC45Mjk5OTMtMy40Nzk5OCw4LjUyMDAyLTI4LjU4MDAxNyw2LjQ1MDAxMiwxNS44NTAwMzcsMjQuNjk5OTUxLTMuNDgwMDQyLDguNTIwMDItMTkuMzk5OTYzLTMxLjQ1MDAxMi0zMi4yNjAwMSw4LDMuNDY5OTcxLTguNDg5OTksMjQuOTUwMDEyLTUuNjQwMDE1LTEzLjgzMDAxNy0yMS41Njk5NDZaIi8+Cjwvc3ZnPgo=';
+
+// Pre-render the embedded SVG to a PNG data URL for jsPDF
+// (jsPDF cannot embed SVGs directly, so we draw to canvas on page load)
+// Canvas uses the logo's natural aspect ratio (954.59 × 861.88)
+(function preRenderLogo() {
+  var img = new Image();
+  img.onload = function() {
+    var c = document.createElement('canvas');
+    c.width = 477; c.height = 431;  // half of viewBox, maintains ratio
+    var ctx = c.getContext('2d');
+    ctx.drawImage(img, 0, 0, 477, 431);
+    logoImgDataUrl = c.toDataURL('image/png');
+    console.info('Logo pre-rendered to PNG for PDF export');
+  };
+  img.src = LOGO_DATA_URI;
+})();
+
+// Set the logo images in the DOM immediately
+document.getElementById('headerLogoImg').src = LOGO_DATA_URI;
+document.getElementById('loadingLogoImg').src = LOGO_DATA_URI;
+
+// ═══════════════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════════════
+var state = {
+  mode: "print",
+  orientation: "portrait",
+  mapView: null,
+  layerRefs: [],
+  isExporting: false,
+  overlayVisible: false
+};
+
+// ═══════════════════════════════════════════════════════════════════════
+// MODE / SETTINGS
+// ═══════════════════════════════════════════════════════════════════════
+function setMode(mode) {
+  state.mode = mode;
+  document.querySelectorAll('.mode-btn').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.mode === mode);
+  });
+  document.getElementById('printSettings').style.display   = mode === 'print'   ? '' : 'none';
+  document.getElementById('digitalSettings').style.display = mode === 'digital' ? '' : 'none';
+  document.getElementById('exportLabel').textContent = mode === 'print' ? 'Export PDF' : 'Export PNG';
+  if (state.overlayVisible) updateOverlay();
+}
+
+function setOrientation(orient) {
+  state.orientation = orient;
+  document.querySelectorAll('.orient-btn').forEach(function(b) {
+    b.classList.toggle('active', b.dataset.orient === orient);
+  });
+  if (state.overlayVisible) updateOverlay();
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// ZOOM CONTROL
+// ═══════════════════════════════════════════════════════════════════════
+function adjustZoom(delta) {
+  if (!state.mapView) return;
+  var z = Math.round(state.mapView.zoom) + delta;
+  z = Math.max(11, Math.min(20, z));
+  state.mapView.goTo({ zoom: z }, { duration: 300 });
+}
+
+function applyZoom(val) {
+  if (!state.mapView) return;
+  var z = parseFloat(val);
+  if (isNaN(z)) return;
+  z = Math.max(11, Math.min(20, z));
+  document.getElementById('zoomInput').value = z;
+  state.mapView.goTo({ zoom: z }, { duration: 300 });
+}
+
+function syncZoomUI(zoom) {
+  var zi = document.getElementById('zoomInput');
+  zi.value = Math.round(zoom * 10) / 10;   // show one decimal
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// OVERLAY TOGGLE
+// ═══════════════════════════════════════════════════════════════════════
+function toggleOverlay() {
+  state.overlayVisible = !state.overlayVisible;
+  var sys = document.getElementById('extentSystem');
+  var btn = document.getElementById('overlayToggle');
+  var lbl = document.getElementById('overlayToggleLabel');
+  var expBtn = document.getElementById('exportPrimary');
+  var hint = document.getElementById('exportGateHint');
+
+  if (state.overlayVisible) {
+    sys.classList.add('active');
+    btn.classList.add('active');
+    lbl.textContent = 'Hide Export Frame';
+    if (expBtn) expBtn.disabled = false;
+    if (hint) hint.style.display = 'none';
+    updateOverlay();
+  } else {
+    sys.classList.remove('active');
+    btn.classList.remove('active');
+    lbl.textContent = 'Show Export Frame';
+    if (expBtn) expBtn.disabled = true;
+    if (hint) hint.style.display = '';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// EXTENT OVERLAY GEOMETRY
+// ═══════════════════════════════════════════════════════════════════════
+function getTargetAspect() {
+  if (state.mode === 'print') {
+    var s    = APP_CONFIG.paperSizes[document.getElementById('paperSize').value];
+    var dims = s[state.orientation];
+    var mapH = dims.h - 225;
+    return dims.w / mapH;
+  } else {
+    var p = APP_CONFIG.digitalPresets[document.getElementById('digitalPreset').value];
+    return p.w / p.h;
+  }
+}
+
+var FRAME_MIN = 120;
+
+function updateOverlay() {
+  if (!state.overlayVisible) return;
+  var container = document.getElementById('mapContainer');
+  var frame     = document.getElementById('extentFrame');
+  var cw = container.clientWidth;
+  var ch = container.clientHeight;
+  var aspect = getTargetAspect();
+
+  var fw, fh;
+  if (aspect >= 1) {
+    fw = Math.min(cw * 0.70, cw - 60);
+    fh = fw / aspect;
+    if (fh > ch * 0.70) { fh = ch * 0.70; fw = fh * aspect; }
+  } else {
+    fh = Math.min(ch * 0.70, ch - 60);
+    fw = fh * aspect;
+    if (fw > cw * 0.70) { fw = cw * 0.70; fh = fw / aspect; }
+  }
+
+  var fl = (cw - fw) / 2;
+  var ft = (ch - fh) / 2;
+
+  frame.style.width  = fw + 'px';
+  frame.style.height = fh + 'px';
+  frame.style.left   = fl + 'px';
+  frame.style.top    = ft + 'px';
+
+  syncDims(fl, ft, fw, fh, cw, ch);
+  updateExtentLabel();
+}
+
+function syncDims(fl, ft, fw, fh, cw, ch) {
+  document.getElementById('dimTop').style.cssText    = 'top:0;left:0;width:'+cw+'px;height:'+ft+'px;';
+  document.getElementById('dimBottom').style.cssText = 'top:'+(ft+fh)+'px;left:0;width:'+cw+'px;height:'+(ch-ft-fh)+'px;';
+  document.getElementById('dimLeft').style.cssText   = 'top:'+ft+'px;left:0;width:'+fl+'px;height:'+fh+'px;';
+  document.getElementById('dimRight').style.cssText  = 'top:'+ft+'px;left:'+(fl+fw)+'px;width:'+(cw-fl-fw)+'px;height:'+fh+'px;';
+}
+
+function updateExtentLabel() {
+  var label = document.getElementById('extentLabel');
+  if (state.mode === 'print') {
+    label.textContent = document.getElementById('paperSize').value.toUpperCase() + ' · ' + state.orientation.toUpperCase();
+  } else {
+    var key = document.getElementById('digitalPreset').value;
+    var d   = APP_CONFIG.digitalPresets[key];
+    label.textContent = key + ' · ' + d.w + '×' + d.h + 'px';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// DRAG & RESIZE
+// ═══════════════════════════════════════════════════════════════════════
+var interaction = { type: null, pointerId: null, startX: 0, startY: 0 };
+var snap = { left: 0, top: 0, width: 0, height: 0, corner: null };
+
+function initInteractions() {
+  var frame = document.getElementById('extentFrame');
+  frame.querySelectorAll('.frame-edge').forEach(function(el)   { el.addEventListener('pointerdown', onMoveStart); });
+  frame.querySelectorAll('.extent-corner').forEach(function(el) { el.addEventListener('pointerdown', onResizeStart); });
+  document.addEventListener('pointermove',  onPointerMove);
+  document.addEventListener('pointerup',    onPointerUp);
+  document.addEventListener('pointercancel', onPointerUp);
+}
+
+function onMoveStart(e) {
+  e.preventDefault(); e.stopPropagation();
+  var frame = document.getElementById('extentFrame');
+  interaction = { type: 'move', pointerId: e.pointerId, startX: e.clientX, startY: e.clientY };
+  snap.left = frame.offsetLeft; snap.top = frame.offsetTop;
+  snap.width = frame.offsetWidth; snap.height = frame.offsetHeight;
+  e.target.setPointerCapture(e.pointerId);
+}
+
+function onResizeStart(e) {
+  e.preventDefault(); e.stopPropagation();
+  var frame = document.getElementById('extentFrame');
+  interaction = { type: 'resize', pointerId: e.pointerId, startX: e.clientX, startY: e.clientY };
+  snap.left = frame.offsetLeft; snap.top = frame.offsetTop;
+  snap.width = frame.offsetWidth; snap.height = frame.offsetHeight;
+  snap.corner = e.target.dataset.corner;
+  e.target.setPointerCapture(e.pointerId);
+}
+
+function onPointerMove(e) {
+  if (!interaction.type || e.pointerId !== interaction.pointerId) return;
+  var container = document.getElementById('mapContainer');
+  var frame     = document.getElementById('extentFrame');
+  var cw = container.clientWidth, ch = container.clientHeight;
+  var dx = e.clientX - interaction.startX, dy = e.clientY - interaction.startY;
+
+  if (interaction.type === 'move') {
+    var nl = Math.max(0, Math.min(cw - snap.width,  snap.left + dx));
+    var nt = Math.max(0, Math.min(ch - snap.height, snap.top  + dy));
+    frame.style.left = nl + 'px'; frame.style.top = nt + 'px';
+    syncDims(nl, nt, snap.width, snap.height, cw, ch);
+  } else if (interaction.type === 'resize') {
+    var aspect = getTargetAspect();
+    var nw, nh, nl, nt;
+    switch (snap.corner) {
+      case 'br': nw = Math.max(FRAME_MIN, snap.width + dx); nh = nw/aspect; nl = snap.left; nt = snap.top; break;
+      case 'bl': nw = Math.max(FRAME_MIN, snap.width - dx); nh = nw/aspect; nl = snap.left+snap.width-nw; nt = snap.top; break;
+      case 'tr': nw = Math.max(FRAME_MIN, snap.width + dx); nh = nw/aspect; nl = snap.left; nt = snap.top+snap.height-nh; break;
+      case 'tl': nw = Math.max(FRAME_MIN, snap.width - dx); nh = nw/aspect; nl = snap.left+snap.width-nw; nt = snap.top+snap.height-nh; break;
+    }
+    if (nl < 0) { nl=0; nw = (snap.corner==='tl'||snap.corner==='bl') ? snap.left+snap.width : nw; nh=nw/aspect; if(snap.corner==='tl') nt=snap.top+snap.height-nh; }
+    if (nt < 0) { nt=0; nh = (snap.corner==='tl'||snap.corner==='tr') ? snap.top+snap.height : nh; nw=nh*aspect; if(snap.corner==='tl') nl=snap.left+snap.width-nw; }
+    if (nl+nw > cw) { nw=cw-nl; nh=nw/aspect; }
+    if (nt+nh > ch) { nh=ch-nt; nw=nh*aspect; }
+    if (nw < FRAME_MIN) { nw=FRAME_MIN; nh=nw/aspect; }
+    if (nh < FRAME_MIN) { nh=FRAME_MIN; nw=nh*aspect; }
+    frame.style.width=nw+'px'; frame.style.height=nh+'px'; frame.style.left=nl+'px'; frame.style.top=nt+'px';
+    syncDims(nl, nt, nw, nh, cw, ch);
+  }
+}
+
+function onPointerUp(e) {
+  if (e.pointerId !== interaction.pointerId) return;
+  interaction.type = null; interaction.pointerId = null;
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// LAYER LIST (with per-layer label toggles)
+// ═══════════════════════════════════════════════════════════════════════
+function buildLayerList() {
+  // Layer list UI is now handled by renderActiveLayerList() in the unified layer manager.
+  // This function is kept as a no-op for backward compatibility with addConfigLayers callbacks.
+}
+
+function toggleLayer(index, visible) {
+  var ref = state.layerRefs[index];
+  if (ref && ref.layer) { ref.layer.visible = visible; ref.config.visible = visible; }
+}
+
+function toggleLabels(index, visible) {
+  var ref = state.layerRefs[index];
+  if (ref && ref.layer) { ref.layer.labelsVisible = visible; }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// EXPORT PIPELINE
+// ═══════════════════════════════════════════════════════════════════════
+function setExportStatus(text, type) {
+  var el = document.getElementById('exportStatus');
+  el.textContent = text; el.className = 'export-status ' + (type || '');
+}
+
+async function doExport() {
+  if (state.isExporting) return;
+
+  // Auto-show overlay if hidden
+  if (!state.overlayVisible) {
+    toggleOverlay();
+    // Brief pause so overlay renders before screenshot
+    await new Promise(function(r) { setTimeout(r, 350); });
+  }
+
+  state.isExporting = true;
+  document.getElementById('exportPrimary').disabled = true;
+  try {
+    if (state.mode === 'print') await exportPDF();
+    else await exportPNG();
+  } catch (err) {
+    console.error('Export failed:', err);
+    setExportStatus('Export failed — ' + err.message, 'error');
+  }
+  state.isExporting = false;
+  document.getElementById('exportPrimary').disabled = false;
+}
+
+async function exportPDF() {
+  setExportStatus('Capturing map…', 'exporting');
+
+  var frame = document.getElementById('extentFrame');
+  var container = document.getElementById('mapContainer');
+  var cRect = container.getBoundingClientRect();
+  var fRect = frame.getBoundingClientRect();
+
+  var area = { x: fRect.left-cRect.left, y: fRect.top-cRect.top, width: fRect.width, height: fRect.height };
+  var paper = APP_CONFIG.paperSizes[document.getElementById('paperSize').value][state.orientation];
+  var titleBlockH = 225;
+  var mapAreaH = paper.h - titleBlockH;
+
+  var screenshot = await state.mapView.takeScreenshot({ area: area, width: paper.w, height: mapAreaH });
+
+  setExportStatus('Building PDF…', 'exporting');
+
+  var jsPDF = window.jspdf.jsPDF;
+  var orient = state.orientation === 'portrait' ? 'p' : 'l';
+  var doc = new jsPDF({ orientation: orient, unit: 'in', format: document.getElementById('paperSize').value });
+
+  var pageW = doc.internal.pageSize.getWidth();
+  var pageH = doc.internal.pageSize.getHeight();
+  var margin = 0.3;
+  var tbHIn = 1.5;
+  var mapH = pageH - tbHIn - margin;
+
+  // Neat line
+  doc.setDrawColor(27,58,45); doc.setLineWidth(0.02);
+  doc.rect(margin/2, margin/2, pageW-margin, pageH-margin);
+
+  // Map image
+  doc.addImage(screenshot.dataUrl, 'PNG', margin, margin, pageW-margin*2, mapH-margin);
+
+  // Gold separator
+  var tbTop = pageH - tbHIn;
+  doc.setDrawColor(200,169,78); doc.setLineWidth(0.015);
+  doc.line(margin, tbTop, pageW-margin, tbTop);
+
+  // Title-block bg
+  doc.setFillColor(250,246,238);
+  doc.rect(margin/2, tbTop, pageW-margin, tbHIn-margin/2, 'F');
+
+  // Re-draw neat line
+  doc.setDrawColor(27,58,45); doc.setLineWidth(0.02);
+  doc.rect(margin/2, margin/2, pageW-margin, pageH-margin);
+
+  // ── Logo ──
+  var logoX = margin + 0.15;
+  var logoY = tbTop + 0.15;
+  // Logo aspect ratio: 954.59 / 861.88 ≈ 1.1076 (wider than tall)
+  var logoH = 0.75;
+  var logoW = logoH * (954.59 / 861.88);  // ~0.83 in
+
+  if (logoLoaded && logoImgDataUrl) {
+    // Real logo — drawn at natural aspect ratio, no circle
+    doc.addImage(logoImgDataUrl, 'PNG', logoX, logoY, logoW, logoH);
+  } else {
+    // Fallback: dark rounded rect with gold initials
+    doc.setFillColor(27,58,45);
+    doc.roundedRect(logoX, logoY, logoW, logoH, 0.06, 0.06, 'F');
+    doc.setFontSize(12); doc.setTextColor(200,169,78);
+    doc.text(APP_CONFIG.logoFallback, logoX+logoW/2, logoY+logoH/2+0.05, { align: 'center' });
+  }
+
+  var titleX = logoX + logoW + 0.18;
+  doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.setTextColor(27,58,45);
+  doc.text(document.getElementById('mapTitle').value || APP_CONFIG.orgName, titleX, tbTop+0.35);
+
+  doc.setFont('helvetica','normal'); doc.setFontSize(10); doc.setTextColor(92,79,60);
+  doc.text(document.getElementById('mapSubtitle').value || '', titleX, tbTop+0.55);
+
+  doc.setFontSize(9); doc.setTextColor(92,92,82);
+  var dept = document.getElementById('department').value;
+  var dateStr = new Date().toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'});
+  doc.text('Prepared by: '+dept+'    |    Date: '+dateStr, titleX, tbTop+0.75);
+
+  doc.setFontSize(7.5); doc.setTextColor(139,133,115);
+  doc.text(APP_CONFIG.coordinateSystem, titleX, tbTop+0.92);
+
+  doc.setFontSize(6.5); doc.setTextColor(160,155,140);
+  doc.text(APP_CONFIG.disclaimer, titleX, tbTop+1.06);
+
+  // North arrow
+  var naX = pageW-margin-0.8, naY = tbTop+0.25;
+  doc.setDrawColor(27,58,45); doc.setFillColor(27,58,45); doc.setLineWidth(0.015);
+  doc.line(naX+0.25, naY+0.7, naX+0.25, naY);
+  doc.triangle(naX+0.25,naY, naX+0.15,naY+0.2, naX+0.35,naY+0.2, 'F');
+  doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(27,58,45);
+  doc.text('N', naX+0.25, naY+0.88, { align:'center' });
+
+  // Scale bar
+  var sbX = naX-1.8, sbY = tbTop+0.55;
+  var mapScale = state.mapView.scale;
+  var feetPerIn = mapScale/12;
+  var barFeet = Math.pow(10, Math.floor(Math.log10(feetPerIn)));
+  if (feetPerIn/barFeet > 5) barFeet *= 5;
+  else if (feetPerIn/barFeet > 2) barFeet *= 2;
+  var barWIn = barFeet/feetPerIn;
+
+  doc.setFillColor(27,58,45); doc.rect(sbX,sbY,barWIn,0.06,'F');
+  doc.setFillColor(255,255,255); doc.rect(sbX,sbY,barWIn/2,0.06,'F');
+  doc.setDrawColor(27,58,45); doc.setLineWidth(0.01); doc.rect(sbX,sbY,barWIn,0.06,'S');
+  doc.setFontSize(7); doc.setTextColor(27,58,45); doc.setFont('helvetica','normal');
+  doc.text('0', sbX, sbY+0.16);
+  var barLabel = barFeet>=5280 ? (barFeet/5280).toFixed(1)+' mi' : barFeet.toLocaleString()+' ft';
+  doc.text(barLabel, sbX+barWIn, sbY+0.16, {align:'right'});
+
+  var fn = 'CoFOR_Map_'+dateStr.replace(/\//g,'-')+'.pdf';
+
+  // ── Legend on PDF (if visible) ──
+  if (typeof window._getLegendItems === "function" && window._legendVisible) {
+    var legItems = window._getLegendItems();
+    if (legItems.length > 0) {
+      var legX = pageW - margin - 1.8, legY = margin + 0.1;
+      var legW = 1.7, legLineH = 0.18, legPad = 0.08;
+      var legH = legPad * 2 + legItems.length * legLineH;
+      doc.setFillColor(255,255,255); doc.setDrawColor(200,200,195); doc.setLineWidth(0.005);
+      doc.roundedRect(legX, legY, legW, legH, 0.04, 0.04, 'FD');
+      var cy = legY + legPad;
+      legItems.forEach(function(item) {
+        var cr = parseInt(item.color.slice(1,3),16), cg = parseInt(item.color.slice(3,5),16), cb = parseInt(item.color.slice(5,7),16);
+        doc.setFillColor(cr, cg, cb); doc.rect(legX + legPad, cy, 0.12, 0.1, 'F');
+        doc.setFontSize(7); doc.setFont('helvetica','normal'); doc.setTextColor(42,42,37);
+        doc.text(item.label, legX + legPad + 0.16, cy + 0.08);
+        cy += legLineH;
+      });
+    }
+  }
+
+  doc.save(fn);
+  setExportStatus('Saved '+fn, 'success');
+}
+
+async function exportPNG() {
+  setExportStatus('Capturing map…', 'exporting');
+
+  var frame = document.getElementById('extentFrame');
+  var container = document.getElementById('mapContainer');
+  var cRect = container.getBoundingClientRect();
+  var fRect = frame.getBoundingClientRect();
+  var area = { x: fRect.left-cRect.left, y: fRect.top-cRect.top, width: fRect.width, height: fRect.height };
+
+  var preset = APP_CONFIG.digitalPresets[document.getElementById('digitalPreset').value];
+  var screenshot = await state.mapView.takeScreenshot({ area: area, width: preset.w, height: preset.h });
+
+  setExportStatus('Adding watermark…', 'exporting');
+
+  var canvas = document.createElement('canvas');
+  canvas.width = preset.w; canvas.height = preset.h;
+  var ctx = canvas.getContext('2d');
+
+  var mapImg = new Image();
+  mapImg.onload = function() {
+    ctx.drawImage(mapImg, 0, 0);
+    var wmH = Math.round(preset.w * 0.08);
+    var wmW = Math.round(wmH * (954.59 / 861.88));
+    var wmPad = 16;
+
+    if (logoLoaded && logoImgDataUrl) {
+      var li = new Image();
+      li.onload = function() {
+        // Draw logo at natural aspect ratio, no circular clip
+        ctx.globalAlpha = 0.6;
+        ctx.drawImage(li, preset.w - wmPad - wmW, preset.h - wmPad - wmH, wmW, wmH);
+        ctx.globalAlpha = 1;
+        downloadCanvas(canvas);
+      };
+      li.src = logoImgDataUrl;
+    } else {
+      // Fallback: dark rounded rect with initials
+      var fbW = wmW; var fbH = wmH;
+      var fbX = preset.w - wmPad - fbW;
+      var fbY = preset.h - wmPad - fbH;
+      ctx.globalAlpha = 0.6;
+      ctx.fillStyle = '#1B3A2D';
+      // Rounded rect
+      var r = 8;
+      ctx.beginPath();
+      ctx.moveTo(fbX+r, fbY); ctx.lineTo(fbX+fbW-r, fbY);
+      ctx.quadraticCurveTo(fbX+fbW, fbY, fbX+fbW, fbY+r);
+      ctx.lineTo(fbX+fbW, fbY+fbH-r);
+      ctx.quadraticCurveTo(fbX+fbW, fbY+fbH, fbX+fbW-r, fbY+fbH);
+      ctx.lineTo(fbX+r, fbY+fbH);
+      ctx.quadraticCurveTo(fbX, fbY+fbH, fbX, fbY+fbH-r);
+      ctx.lineTo(fbX, fbY+r);
+      ctx.quadraticCurveTo(fbX, fbY, fbX+r, fbY);
+      ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = '#C8A94E';
+      ctx.font = 'bold '+(fbH*0.4)+'px sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(APP_CONFIG.logoFallback, fbX+fbW/2, fbY+fbH/2);
+      downloadCanvas(canvas);
+    }
+  };
+  mapImg.src = screenshot.dataUrl;
+}
+
+function downloadCanvas(canvas) {
+  // Composite legend overlay onto canvas before saving
+  if (typeof window._drawLegendOnCanvas === "function") {
+    var ctx = canvas.getContext("2d");
+    window._drawLegendOnCanvas(ctx, canvas.width - 194, canvas.height - 260, 180);
+  }
+  canvas.toBlob(function(blob) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    var d = new Date().toLocaleDateString('en-US').replace(/\//g,'-');
+    a.download = 'CoFOR_Map_'+d+'.png'; a.href = url; a.click();
+    URL.revokeObjectURL(url);
+    setExportStatus('PNG saved!', 'success');
+  }, 'image/png');
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// MAP INITIALIZATION
+//
+// Basemap: If an API key is configured, the app uses the vector tile
+// basemap specified in APP_CONFIG.basemap (default: streets-navigation-vector).
+// Vector tiles render text and geometry crisply at every zoom level.
+// Without an API key, falls back to raster "osm" tiles (no key needed).
+// ═══════════════════════════════════════════════════════════════════════
+require([
+  "esri/config",
+  "esri/Map",
+  "esri/views/MapView",
+  "esri/layers/FeatureLayer",
+  "esri/widgets/ScaleBar",
+  "esri/widgets/Zoom",
+  "esri/widgets/Locate",
+  "esri/widgets/BasemapToggle",
+  "esri/layers/GraphicsLayer",
+  "esri/widgets/Sketch/SketchViewModel",
+  "esri/identity/IdentityManager",
+  "esri/geometry/projection",
+  "esri/core/reactiveUtils"
+], function(esriConfig, Map, MapView, FeatureLayer, ScaleBar, Zoom, Locate, BasemapToggle, GraphicsLayer, SketchViewModel, esriId, projection, reactiveUtils) {
+
+  // ── Suppress ALL login prompts ──
+  // This deployment accesses only public layers via direct FeatureServer URLs.
+  // No portal authentication is needed. Reject every getCredential call so the
+  // SDK never shows a sign-in dialog. Renderer/drawingInfo loads via the REST
+  // endpoint and the fixRendererFields() workaround handles any field/value
+  // mismatches that result from client-side rendering of hosted view layers.
+  esriId.destroyCredentials();
+  esriId.getCredential = function() {
+    return Promise.reject(new Error("Login suppressed — public access only"));
+  };
+
+  // ── API Key + Basemap selection ──
+  var useVectorBasemap = false;
+  if (APP_CONFIG.apiKey && APP_CONFIG.apiKey.length > 0) {
+    esriConfig.apiKey = APP_CONFIG.apiKey;
+    useVectorBasemap = true;
+    console.info('API key set — using vector basemap: ' + APP_CONFIG.basemap);
+  } else {
+    console.info('No API key — using raster OSM basemap');
+  }
+
+  var basemapId = useVectorBasemap ? APP_CONFIG.basemap : "osm";
+  var map = new Map({ basemap: basemapId });
+
+  var view = new MapView({
+    container: "viewDiv",
+    map: map,
+    center: APP_CONFIG.mapCenter,
+    zoom: APP_CONFIG.mapZoom,
+    constraints: { minZoom: 11, maxZoom: 20, snapToZoom: false },
+    ui: { components: [] },
+    popup: {
+      dockEnabled: true,
+      dockOptions: { buttonEnabled: false, breakpoint: false, position: "bottom-right" }
+    }
+  });
+
+  state.mapView = view;
+
+  // ── Add Layers ──
+  // Helper: resolve a portal item ID to its service URL (no auth needed for public items)
+  function resolveItemUrl(itemId) {
+    return fetch("https://fairoaksranch.maps.arcgis.com/sharing/rest/content/items/" + itemId + "?f=json")
+      .then(function(r) { return r.json(); })
+      .then(function(d) { return d.url || null; })
+      .catch(function() { return null; });
+  }
+
+  // Build layers (async for parcels URL resolution)
+  function addConfigLayers() {
+    var pending = [];
+    APP_CONFIG.layers.forEach(function(cfg) {
+      if (cfg.type === 'parcels') {
+        var p = resolveItemUrl(cfg.id).then(function(serviceUrl) {
+          if (!serviceUrl) { console.warn('Could not resolve parcels item URL'); return; }
+          var layer = new FeatureLayer({
+            url: serviceUrl + "/" + (cfg.sublayer || 0),
+            title: cfg.title, visible: cfg.visible,
+            outFields: ["*"],
+            popupEnabled: true,
+            popupTemplate: {
+              title: "Parcel",
+              content: [{
+                type: "fields",
+                fieldInfos: [
+                  { fieldName: "Address_Num_", label: "Address Number" },
+                  { fieldName: "SITUS_ADDR",   label: "Situs Address" },
+                  { fieldName: "OWNER_NAME",   label: "Owner" },
+                  { fieldName: "SUBDIVISION",  label: "Subdivision" },
+                  { fieldName: "LEGAL_ACRES",  label: "Acreage" }
+                ]
+              }]
+            },
+            renderer: {
+              type: "simple",
+              symbol: {
+                type: "simple-fill",
+                color: [230,222,200,0.15],
+                outline: { color: [139,133,115,0.6], width: 0.7 }
+              }
+            },
+            labelingInfo: [{
+              symbol: {
+                type: "text",
+                color: [42,42,37,0.85],
+                haloColor: [255,255,255,0.9],
+                haloSize: 1.2,
+                font: { size: 9, weight: "bold", family: "Noto Sans" }
+              },
+              labelExpressionInfo: {
+                expression:
+                  'var num = $feature.Address_Num_;\n' +
+                  'if (IsEmpty(num)) return "";\n' +
+                  'return Text(num);'
+              },
+              minScale: 8000, maxScale: 0,
+              labelPlacement: "always-horizontal",
+              deconflictionStrategy: "static"
+            }],
+            labelsVisible: true
+          });
+          map.add(layer, 0); // at bottom
+          state.layerRefs.push({ config: cfg, layer: layer });
+          buildLayerList();
+        });
+        pending.push(p);
+      } else {
+        var layer;
+        if (cfg.type === 'roads') {
+          layer = new FeatureLayer({
+            url: cfg.url,
+            title: cfg.title, visible: cfg.visible,
+            popupEnabled: true,
+            renderer: {
+              type: "simple",
+              symbol: { type: "simple-line", color: [92,79,60,0.7], width: 1.2, style: "solid" }
+            },
+            labelingInfo: [{
+              symbol: {
+                type: "text",
+                color: [92,79,60,0.9],
+                haloColor: [255,255,255,0.85],
+                haloSize: 1,
+                font: { size: 8.5, weight: "normal", family: "Noto Sans" }
+              },
+              labelExpressionInfo: { expression: "$feature.FULL_NAME" },
+              minScale: 12000, maxScale: 0,
+              labelPlacement: "center-along",
+              repeatLabel: true, repeatLabelDistance: 300
+            }],
+            labelsVisible: true
+          });
+        } else if (cfg.type === 'boundaries') {
+          layer = new FeatureLayer({
+            url: cfg.url,
+            title: cfg.title, visible: cfg.visible,
+            popupEnabled: false,
+            renderer: {
+              type: "simple",
+              symbol: {
+                type: "simple-fill",
+                color: [0,0,0,0],
+                outline: { color: [27,58,45,0.8], width: 2.5, style: "dash" }
+              }
+            }
+          });
+        }
+        if (layer) {
+          map.add(layer);
+          state.layerRefs.push({ config: cfg, layer: layer });
+        }
+      }
+    });
+    return Promise.all(pending);
+  }
+  // ── Load projection engine BEFORE adding layers ──
+  // Required for on-the-fly reprojection of polygon geometries from
+  // non-Web-Mercator services (e.g. WKID 102740 NAD83 TX S Central).
+  projection.load().then(function() {
+    console.info("[PE] Projection engine loaded");
+    return addConfigLayers();
+  }).then(function() {
+    // Sync all loaded base layers into activeLayers
+    syncBaseLayersToActive();
+    // Zoom to City Limits (must run after addConfigLayers populates state.layerRefs)
+    var boundsRef = state.layerRefs.find(function(r) { return r.config.type === 'boundaries'; });
+    if (boundsRef && boundsRef.layer) {
+      boundsRef.layer.when(function() {
+        boundsRef.layer.queryExtent().then(function(result) {
+          if (result.extent) view.goTo(result.extent.expand(1.15), { duration: 1200 });
+        });
+      });
+    }
+  }).catch(function(err) {
+    console.warn("[PE] Projection engine load failed — adding layers anyway:", err);
+    addConfigLayers().then(function() { syncBaseLayersToActive(); });
+  });
+
+  // ── Drawings layer (always on top) ──
+  var drawingsLayer = new GraphicsLayer({ title: "Drawings", listMode: "hide" });
+  map.add(drawingsLayer);
+
+  // ── Widgets ──
+  view.ui.add(new Zoom({ view: view }),   "top-right");
+  view.ui.add(new Locate({ view: view }), "top-right");
+  // BasemapToggle replaced by basemap grid in panel
+  view.ui.add(new ScaleBar({ view: view, unit: "imperial", style: "ruler" }), "bottom-left");
+
+  // ── Live zoom + scale sync ──
+  view.watch("zoom", function(z) { syncZoomUI(z); });
+  view.watch("scale", function(s) {
+    document.getElementById('scaleInfo').textContent = 'Scale: 1:' + Math.round(s).toLocaleString();
+    document.getElementById('zoomScale').textContent = '1:' + Math.round(s).toLocaleString();
+  });
+
+  // ── On View Ready ──
+  function dismissLoading() {
+    syncZoomUI(view.zoom);
+    document.getElementById('loadingOverlay').classList.add('hidden');
+    initInteractions();
+  }
+
+  view.when(function() {
+    setTimeout(dismissLoading, 800);
+  }, function(err) {
+    // If the map fails to load, still dismiss the loading overlay
+    console.error('MapView failed to load:', err);
+    setTimeout(dismissLoading, 500);
+  });
+
+  // Safety net: dismiss loading overlay after 10s no matter what
+  setTimeout(function() {
+    var overlay = document.getElementById('loadingOverlay');
+    if (!overlay.classList.contains('hidden')) {
+      console.warn('Loading overlay timeout — forcing dismiss');
+      overlay.classList.add('hidden');
+      initInteractions();
+    }
+  }, 10000);
+
+  // ── SketchViewModel for drawing tools ──
+  var drawColor = "#C8A94E";
+  var drawFillOpacity = 0.3;
+  var drawStrokeOpacity = 1;
+  var drawTextValue = "Label";
+
+  // ArcGIS JS SDK 4.x color arrays: [r, g, b, a] where a is 0–1
+  function hexToRgba(hex, alpha) {
+    var r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
+    return [r, g, b, Math.max(0, Math.min(1, alpha))];
+  }
+  function makeDrawSymbols() {
+    var so = drawStrokeOpacity;
+    return {
+      point: { type: "simple-marker", style: "circle", color: hexToRgba(drawColor, 0.9 * so), size: 10,
+               outline: { color: hexToRgba(drawColor, so), width: 1.5 } },
+      polyline: { type: "simple-line", color: hexToRgba(drawColor, so), width: 3 },
+      polygon: { type: "simple-fill", color: hexToRgba(drawColor, drawFillOpacity * so),
+                 outline: { color: hexToRgba(drawColor, so), width: 2 } }
+    };
+  }
+  var syms = makeDrawSymbols();
+  var sketchVM = new SketchViewModel({
+    layer: drawingsLayer, view: view, defaultCreateOptions: { hasZ: false },
+    pointSymbol: syms.point, polylineSymbol: syms.polyline, polygonSymbol: syms.polygon
+  });
+
+  // Apply final symbol when shape is completed
+  sketchVM.on("create", function(evt) {
+    if (evt.state === "complete") {
+      var g = evt.graphic; var s = makeDrawSymbols();
+      if (g.geometry.type === "point") g.symbol = s.point;
+      else if (g.geometry.type === "polyline") g.symbol = s.polyline;
+      else g.symbol = s.polygon;
+      document.querySelectorAll(".draw-tool-btn").forEach(function(b){ b.classList.remove("active"); });
+    }
+  });
+
+  // ── Text tool — click map to place text graphic ──
+  var textToolActive = false;
+  var textClickHandler = null;
+
+  function activateTextTool() {
+    textToolActive = true;
+    sketchVM.cancel();
+    document.getElementById("drawTextRow").style.display = "flex";
+    view.container.style.cursor = "text";
+    // Remove previous handler if any
+    if (textClickHandler) { textClickHandler.remove(); textClickHandler = null; }
+    textClickHandler = view.on("click", function(evt) {
+      if (!textToolActive) return;
+      evt.stopPropagation();
+      var txt = document.getElementById("drawTextInput").value || "Label";
+      var sz = parseInt(document.getElementById("drawTextSize").value, 10) || 14;
+      var so = drawStrokeOpacity;
+      var textGraphic = {
+        geometry: evt.mapPoint,
+        symbol: {
+          type: "text",
+          text: txt,
+          color: hexToRgba(drawColor, so),
+          haloColor: [255, 255, 255, 0.85],
+          haloSize: 1.5,
+          font: { size: sz, weight: "bold", family: "DM Sans" }
+        },
+        attributes: { _drawType: "text", _text: txt, _fontSize: sz }
+      };
+      drawingsLayer.add(textGraphic);
+      // Stay in text mode for rapid placement — user clicks Cancel to stop
+    });
+  }
+
+  function deactivateTextTool() {
+    textToolActive = false;
+    document.getElementById("drawTextRow").style.display = "none";
+    view.container.style.cursor = "";
+    if (textClickHandler) { textClickHandler.remove(); textClickHandler = null; }
+  }
+
+  // ── Drawing toggle ──
+  var drawToggle = document.getElementById("drawingToggle");
+  var drawPanel = document.getElementById("drawingPanel");
+  if (drawToggle) {
+    drawToggle.addEventListener("change", function() {
+      drawPanel.style.display = this.checked ? "block" : "none";
+      if (!this.checked) {
+        sketchVM.cancel();
+        deactivateTextTool();
+        closeGraphicEditor();
+        document.querySelectorAll(".draw-tool-btn").forEach(function(b){ b.classList.remove("active"); });
+      }
+    });
+  }
+
+  // ── Tool button clicks ──
+  document.querySelectorAll(".draw-tool-btn").forEach(function(btn) {
+    btn.addEventListener("click", function() {
+      var tool = this.dataset.tool;
+      document.querySelectorAll(".draw-tool-btn").forEach(function(b){ b.classList.remove("active"); });
+      this.classList.add("active");
+
+      if (tool === "text") {
+        sketchVM.cancel();
+        activateTextTool();
+      } else {
+        deactivateTextTool();
+        var s = makeDrawSymbols();
+        sketchVM.pointSymbol = s.point; sketchVM.polylineSymbol = s.polyline; sketchVM.polygonSymbol = s.polygon;
+        sketchVM.create(tool);
+      }
+    });
+  });
+
+  document.getElementById("drawCancel").addEventListener("click", function() {
+    sketchVM.cancel();
+    deactivateTextTool();
+    document.querySelectorAll(".draw-tool-btn").forEach(function(b){ b.classList.remove("active"); });
+  });
+  document.getElementById("drawClear").addEventListener("click", function() {
+    drawingsLayer.removeAll(); sketchVM.cancel(); deactivateTextTool(); closeGraphicEditor();
+    document.querySelectorAll(".draw-tool-btn").forEach(function(b){ b.classList.remove("active"); });
+  });
+  document.getElementById("drawColorPicker").addEventListener("input", function() { drawColor = this.value; });
+  document.getElementById("drawFillSlider").addEventListener("input", function() {
+    drawFillOpacity = parseInt(this.value, 10) / 100;
+    document.getElementById("drawFillVal").textContent = this.value + "%";
+  });
+  document.getElementById("drawOpacitySlider").addEventListener("input", function() {
+    drawStrokeOpacity = parseInt(this.value, 10) / 100;
+    document.getElementById("drawOpacityVal").textContent = this.value + "%";
+  });
+
+  // ══════════════════════════════════════════════════════════════
+  // GRAPHIC EDITOR — Click placed graphic to edit color/opacity
+  // ══════════════════════════════════════════════════════════════
+  var editingGraphic = null;
+  var editorEl = document.getElementById("graphicEditor");
+
+  function openGraphicEditor(graphic, screenPt) {
+    editingGraphic = graphic;
+    editorEl.classList.add("visible");
+
+    // Position near the click point
+    var mapRect = document.getElementById("viewDiv").getBoundingClientRect();
+    var ex = Math.min(screenPt.x + 12, mapRect.width - 260);
+    var ey = Math.min(screenPt.y - 30, mapRect.height - 300);
+    editorEl.style.left = Math.max(4, ex) + "px";
+    editorEl.style.top = Math.max(4, ey) + "px";
+
+    // Read current symbol values
+    var sym = graphic.symbol;
+    var curColor = "#C8A94E";
+    var curFill = 30;
+    var curOpacity = 100;
+    var isText = (sym && sym.type === "text");
+
+    if (sym) {
+      // Extract color
+      var c = sym.color;
+      if (c) {
+        if (typeof c.toHex === "function") curColor = c.toHex();
+        else if (Array.isArray(c)) curColor = "#" + ((1<<24)+(c[0]<<16)+(c[1]<<8)+c[2]).toString(16).slice(1);
+        // Extract alpha
+        var alpha = 1;
+        if (typeof c.a !== "undefined") alpha = c.a;
+        else if (Array.isArray(c) && c.length >= 4) alpha = c[3];
+        curOpacity = Math.round(alpha * 100);
+      }
+      // Fill alpha from polygon
+      if (sym.type === "simple-fill" && sym.color) {
+        var fc = sym.color;
+        var fa = 1;
+        if (typeof fc.a !== "undefined") fa = fc.a;
+        else if (Array.isArray(fc) && fc.length >= 4) fa = fc[3];
+        curFill = Math.round(fa * 100);
+        // Opacity from outline
+        if (sym.outline && sym.outline.color) {
+          var oc = sym.outline.color;
+          var oa = 1;
+          if (typeof oc.a !== "undefined") oa = oc.a;
+          else if (Array.isArray(oc) && oc.length >= 4) oa = oc[3];
+          curOpacity = Math.round(oa * 100);
+        }
+      }
+    }
+
+    document.getElementById("geColor").value = curColor;
+    document.getElementById("geFill").value = curFill;
+    document.getElementById("geFillVal").textContent = curFill + "%";
+    document.getElementById("geOpacity").value = curOpacity;
+    document.getElementById("geOpacityVal").textContent = curOpacity + "%";
+
+    // Show text fields if text graphic
+    document.getElementById("geTextRow").style.display = isText ? "flex" : "none";
+    document.getElementById("geTextSizeRow").style.display = isText ? "flex" : "none";
+    if (isText) {
+      document.getElementById("geText").value = sym.text || "";
+      document.getElementById("geTextSize").value = (sym.font && sym.font.size) || 14;
+    }
+
+    // Label field — for ALL shapes (editable annotation)
+    var labelRow = document.getElementById("geLabelRow");
+    labelRow.style.display = isText ? "none" : "flex"; // hide for text type (text IS the label)
+    var existingLabel = (graphic.attributes && graphic.attributes._label) || "";
+    document.getElementById("geLabelInput").value = existingLabel;
+  }
+
+  function closeGraphicEditor() {
+    editingGraphic = null;
+    editorEl.classList.remove("visible");
+  }
+
+  function applyEditorToGraphic() {
+    if (!editingGraphic) return;
+    var g = editingGraphic;
+    var color = document.getElementById("geColor").value;
+    var fillPct = parseInt(document.getElementById("geFill").value, 10) / 100;
+    var opPct = parseInt(document.getElementById("geOpacity").value, 10) / 100;
+
+    var sym = g.symbol;
+    if (!sym) return;
+
+    if (sym.type === "text") {
+      var txt = document.getElementById("geText").value || "Label";
+      var sz = parseInt(document.getElementById("geTextSize").value, 10) || 14;
+      g.symbol = {
+        type: "text", text: txt,
+        color: hexToRgba(color, opPct),
+        haloColor: [255, 255, 255, 0.85], haloSize: 1.5,
+        font: { size: sz, weight: "bold", family: "DM Sans" }
+      };
+    } else if (sym.type === "simple-fill") {
+      g.symbol = {
+        type: "simple-fill",
+        color: hexToRgba(color, fillPct * opPct),
+        outline: { color: hexToRgba(color, opPct), width: sym.outline ? sym.outline.width || 2 : 2 }
+      };
+    } else if (sym.type === "simple-line") {
+      g.symbol = { type: "simple-line", color: hexToRgba(color, opPct), width: sym.width || 3 };
+    } else if (sym.type === "simple-marker") {
+      g.symbol = {
+        type: "simple-marker", style: sym.style || "circle", color: hexToRgba(color, 0.9 * opPct), size: sym.size || 10,
+        outline: { color: hexToRgba(color, opPct), width: 1.5 }
+      };
+    }
+  }
+
+  // Editor input handlers — live update
+  document.getElementById("geColor").addEventListener("input", applyEditorToGraphic);
+  document.getElementById("geFill").addEventListener("input", function() {
+    document.getElementById("geFillVal").textContent = this.value + "%";
+    applyEditorToGraphic();
+  });
+  document.getElementById("geOpacity").addEventListener("input", function() {
+    document.getElementById("geOpacityVal").textContent = this.value + "%";
+    applyEditorToGraphic();
+  });
+  document.getElementById("geText").addEventListener("input", applyEditorToGraphic);
+  document.getElementById("geLabelInput").addEventListener("input", function() {
+    if (!editingGraphic) return;
+    var txt = this.value.trim();
+    if (!editingGraphic.attributes) editingGraphic.attributes = {};
+    editingGraphic.attributes._label = txt;
+    // Find or create companion label graphic
+    var labelUid = editingGraphic.uid || editingGraphic.attributes._uid;
+    if (!labelUid) { labelUid = "g" + Date.now() + Math.random(); editingGraphic.attributes._uid = labelUid; }
+    var existing = null;
+    drawingsLayer.graphics.forEach(function(g) {
+      if (g.attributes && g.attributes._labelFor === labelUid) existing = g;
+    });
+    if (txt.length === 0) {
+      if (existing) drawingsLayer.remove(existing);
+      updateLegend();
+      return;
+    }
+    // Compute center point for the label
+    var geom = editingGraphic.geometry;
+    var labelPt = null;
+    if (geom.type === "point") labelPt = geom;
+    else if (geom.extent) labelPt = geom.extent.center;
+    if (!labelPt) { updateLegend(); return; }
+    var color = document.getElementById("geColor").value;
+    var opPct = parseInt(document.getElementById("geOpacity").value, 10) / 100;
+    var labelSym = {
+      type: "text", text: txt,
+      color: hexToRgba(color, opPct),
+      haloColor: [255,255,255,0.9], haloSize: 1.2,
+      font: { size: 11, weight: "bold", family: "DM Sans" },
+      yoffset: -14
+    };
+    if (existing) {
+      existing.geometry = labelPt;
+      existing.symbol = labelSym;
+    } else {
+      drawingsLayer.add({
+        geometry: labelPt, symbol: labelSym,
+        attributes: { _labelFor: labelUid, _isLabel: true, _label: txt }
+      });
+    }
+    updateLegend();
+  });
+  document.getElementById("geTextSize").addEventListener("input", applyEditorToGraphic);
+  document.getElementById("geClose").addEventListener("click", closeGraphicEditor);
+  document.getElementById("geDelete").addEventListener("click", function() {
+    if (editingGraphic) {
+      // Also remove companion label
+      var uid = editingGraphic.attributes && editingGraphic.attributes._uid;
+      if (uid) {
+        var toRemove = [];
+        drawingsLayer.graphics.forEach(function(g) {
+          if (g.attributes && g.attributes._labelFor === uid) toRemove.push(g);
+        });
+        toRemove.forEach(function(g) { drawingsLayer.remove(g); });
+      }
+      drawingsLayer.remove(editingGraphic);
+      closeGraphicEditor();
+      updateLegend();
+    }
+  });
+
+  // ── Click on map to select drawn graphic for editing ──
+  view.on("click", function(evt) {
+    if (textToolActive) return; // text tool handles its own clicks
+    view.hitTest(evt, { include: [drawingsLayer] }).then(function(response) {
+      if (response.results && response.results.length > 0) {
+        var hit = response.results[0];
+        if (hit.graphic && hit.graphic.layer === drawingsLayer) {
+          openGraphicEditor(hit.graphic, evt);
+        }
+      } else {
+        // Clicked empty area — close editor
+        if (editingGraphic) closeGraphicEditor();
+      }
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════════
+  // UNIFIED LAYER MANAGEMENT — Search, Add, Toggle, Opacity, Remove
+  // ══════════════════════════════════════════════════════════════
+  var orgItems = [];      // full catalog from org portal search
+  var searchFetched = false;
+  var activeLayers = [];  // { uid, title, layers: [FeatureLayer...], visible, opacity }
+  var uidCounter = 0;
+  var searchInput = document.getElementById("layerSearchInput");
+  var searchResults = document.getElementById("layerSearchResults");
+
+  // ── Pre-populate base layers into activeLayers ──
+  // Called after addConfigLayers resolves (parcels is async)
+  function syncBaseLayersToActive() {
+    // Clear any stale entries and rebuild from state.layerRefs
+    activeLayers = activeLayers.filter(function(a) { return a.uid.indexOf("base-") !== 0; });
+    state.layerRefs.forEach(function(ref) {
+      var initSw = "#999999", initOut = "#999999", initW = 2;
+      if (ref.layer.renderer && ref.layer.renderer.symbol) {
+        var _s = ref.layer.renderer.symbol;
+        var _c = _s.color || (_s.outline && _s.outline.color);
+        if (_c && Array.isArray(_c)) initSw = "#" + ((1<<24)+(_c[0]<<16)+(_c[1]<<8)+_c[2]).toString(16).slice(1);
+        if (_s.outline && _s.outline.color && Array.isArray(_s.outline.color)) {
+          var _oc = _s.outline.color;
+          initOut = "#" + ((1<<24)+(_oc[0]<<16)+(_oc[1]<<8)+_oc[2]).toString(16).slice(1);
+        } else { initOut = initSw; }
+        initW = (_s.outline && _s.outline.width) || (_s.width) || 2;
+      }
+      activeLayers.unshift({
+        uid: "base-" + (uidCounter++),
+        title: ref.config.title,
+        layers: [ref.layer],
+        visible: ref.config.visible,
+        opacity: 1,
+        _swatchColor: initSw,
+        _outlineColor: initOut,
+        _lineWidth: initW
+      });
+    });
+    renderActiveLayerList();
+  }
+  // Initial render (roads + boundaries load sync, parcels arrives later)
+  syncBaseLayersToActive();
+
+  // ── Fetch public org items from portal search ──
+  var orgId = null; // resolved dynamically
+
+  function fetchOrgId() {
+    if (orgId) return Promise.resolve(orgId);
+    return fetch("https://fairoaksranch.maps.arcgis.com/sharing/rest/portals/self?f=json")
+      .then(function(r) { return r.json(); })
+      .then(function(d) { orgId = d.id || d.orgId || ""; return orgId; })
+      .catch(function() { orgId = ""; return ""; });
+  }
+
+  function fetchOrgItems() {
+    if (searchFetched) return Promise.resolve();
+    searchResults.innerHTML = '<div class="ls-status">Loading catalog…</div>';
+    searchResults.style.display = "block";
+    return fetchOrgId().then(function(oid) {
+    var all = [];
+    function fetchPage(start) {
+      var qParts = ['type:"Feature Service"'];
+      if (oid) qParts.unshift("orgid:" + oid);
+      var url = "https://www.arcgis.com/sharing/rest/search?"
+        + "q=" + encodeURIComponent(qParts.join(" "))
+        + "&num=100&start=" + start + "&f=json&sortField=title&sortOrder=asc";
+      return fetch(url)
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.results) all = all.concat(d.results);
+          if (d.nextStart && d.nextStart !== -1 && all.length < (d.total || 0)) return fetchPage(d.nextStart);
+          return all;
+        });
+    }
+    return fetchPage(1).then(function(items) {
+      orgItems = items.filter(function(i) { return i.access === "public" && i.url; });
+      searchFetched = true;
+      searchResults.style.display = "none";
+      searchResults.innerHTML = "";
+      console.info("Loaded " + orgItems.length + " public Feature Service items from org");
+    }).catch(function(e) {
+      console.warn("Could not fetch org layers:", e);
+      orgItems = [];
+      searchFetched = true;
+      searchResults.style.display = "none";
+    });
+    }); // end fetchOrgId.then
+  }
+
+  // ── Search input event handling ──
+  var searchDebounce = null;
+  searchInput.addEventListener("focus", function() {
+    if (!searchFetched) fetchOrgItems().then(function() { filterLayerSearch(searchInput.value); });
+    else filterLayerSearch(this.value);
+  });
+  searchInput.addEventListener("input", function() {
+    clearTimeout(searchDebounce);
+    var v = this.value;
+    searchDebounce = setTimeout(function() { filterLayerSearch(v); }, 120);
+  });
+  document.addEventListener("click", function(e) {
+    if (!e.target.closest("#layerSearchWrapper")) searchResults.style.display = "none";
+  });
+
+  // ── Filter + highlight (predictive text) ──
+  function filterLayerSearch(term) {
+    var t = term.trim().toLowerCase();
+    if (t.length === 0) {
+      searchResults.innerHTML = '<div class="ls-status">Type to search public layers</div>';
+      searchResults.style.display = "block";
+      return;
+    }
+    // Exclude already-added items by URL (not perfect but avoids most dupes)
+    var addedUrls = {};
+    activeLayers.forEach(function(a) {
+      a.layers.forEach(function(l) { if (l.url) addedUrls[l.url.replace(/\/\d+$/, "")] = true; });
+    });
+    var matches = orgItems.filter(function(i) {
+      if (addedUrls[i.url]) return false;
+      return (i.title || "").toLowerCase().indexOf(t) >= 0 ||
+             (i.snippet || "").toLowerCase().indexOf(t) >= 0 ||
+             (i.tags || []).some(function(tag) { return tag.toLowerCase().indexOf(t) >= 0; });
+    });
+    renderSearchResults(matches.slice(0, 25), t);
+  }
+
+  function highlightMatch(text, term) {
+    if (!term || !text) return text || "";
+    var idx = text.toLowerCase().indexOf(term);
+    if (idx < 0) return text;
+    return text.substring(0, idx) + '<span class="ls-match">' + text.substring(idx, idx + term.length) + '</span>' + text.substring(idx + term.length);
+  }
+
+  function renderSearchResults(items, term) {
+    if (items.length === 0) {
+      searchResults.innerHTML = '<div class="ls-status">No matching layers</div>';
+    } else {
+      searchResults.innerHTML = items.map(function(i) {
+        return '<div class="ls-item" data-id="' + i.id + '" data-url="' + i.url + '" data-title="' + (i.title || "").replace(/"/g, "&quot;") + '">'
+          + '<span class="ls-title">' + highlightMatch(i.title || "Untitled", term) + '</span>'
+          + '<span class="ls-owner">' + (i.owner || "") + '</span></div>';
+      }).join("");
+    }
+    searchResults.style.display = "block";
+  }
+
+  // ── Click search result → add layer ──
+  searchResults.addEventListener("click", function(e) {
+    var item = e.target.closest(".ls-item");
+    if (!item) return;
+    var id = item.dataset.id, serviceUrl = item.dataset.url, title = item.dataset.title;
+    searchResults.style.display = "none";
+    searchInput.value = "";
+    addLayerFromService(id, serviceUrl, title);
+  });
+
+  // ── Helper: read renderer info into an activeLayers entry ──
+  function applyRendererToEntry(entry, lyr) {
+    var rnd = lyr.renderer;
+    if (rnd) {
+      var isComplex = (rnd.type === "unique-value" || rnd.type === "class-breaks" || rnd.type === "heatmap" || rnd.type === "dot-density");
+      entry._hasComplexRenderer = isComplex;
+
+      // Read swatch color from renderer
+      var sym = null;
+      if (rnd.symbol) {
+        sym = rnd.symbol;
+      } else if (rnd.uniqueValueInfos && rnd.uniqueValueInfos.length > 0) {
+        sym = rnd.uniqueValueInfos[0].symbol;
+      } else if (rnd.classBreakInfos && rnd.classBreakInfos.length > 0) {
+        sym = rnd.classBreakInfos[0].symbol;
+      } else if (rnd.defaultSymbol) {
+        sym = rnd.defaultSymbol;
+      }
+      if (sym) {
+        entry._swatchColor = extractColor(sym.color) || extractColor(sym.outline && sym.outline.color) || "#999999";
+        entry._outlineColor = extractColor(sym.outline && sym.outline.color) || entry._swatchColor;
+        entry._lineWidth = (sym.outline && sym.outline.width) || sym.width || 2;
+      }
+    }
+  }
+
+  function addLayerFromService(itemId, serviceUrl, title) {
+    // Check if already added by URL
+    var found = false;
+    activeLayers.forEach(function(a) {
+      a.layers.forEach(function(l) { if (l.url && l.url.indexOf(serviceUrl) === 0) found = true; });
+    });
+    if (found) return;
+
+    fetch(serviceUrl + "?f=json").then(function(r) { return r.json(); }).then(function(info) {
+      var sublayers = info.layers || [];
+      if (sublayers.length === 0) { console.warn("No sublayers in", serviceUrl); return; }
+
+      // Create one activeLayers entry PER sublayer (each gets own controls)
+      sublayers.forEach(function(sl) {
+        var layerTitle = sublayers.length > 1 ? title + " — " + sl.name : title;
+        var lyr = new FeatureLayer({
+          url: serviceUrl + "/" + sl.id,
+          title: layerTitle,
+          visible: true,
+          outFields: ["*"]  // required for unique-value renderers to resolve
+        });
+        map.add(lyr, map.layers.length - 1); // below drawings
+
+        var entry = {
+          uid: "dyn-" + (uidCounter++),
+          title: layerTitle,
+          layers: [lyr],
+          visible: true,
+          opacity: 1,
+          _hasComplexRenderer: false,  // set after load
+          _swatchColor: "#999999",
+          _outlineColor: "#999999",
+          _lineWidth: 2
+        };
+        activeLayers.push(entry);
+
+        // After layer loads, detect renderer type and read swatch
+        lyr.when(function() {
+          // ── Fix renderer field/value mismatches for AGOL hosted views ──
+          // Views can rename source fields and use label-style values in
+          // drawingInfo while the query API returns data under view field names
+          // with coded values. The SDK renders client-side, so we patch both
+          // the renderer field name and unique-value entries to match the data.
+          (function fixRendererFields() {
+            var rnd = lyr.renderer;
+            if (!rnd) return;
+
+            var propsToCheck = ["field", "field2", "field3"].filter(function(p) { return !!rnd[p]; });
+            if (propsToCheck.length === 0) return;
+
+            // Build lookups from actual layer fields
+            var actualFieldSet = {};
+            var aliasByLower = {};
+            var stringFields = [];
+            (lyr.fields || []).forEach(function(f) {
+              actualFieldSet[f.name.toLowerCase()] = true;
+              if (f.alias) aliasByLower[f.alias.toLowerCase()] = f.name;
+              if (f.type === "string" || f.type === "esriFieldTypeString") {
+                stringFields.push(f.name);
+              }
+            });
+
+            var needsProbe = [];
+            var remapped = false;
+
+            propsToCheck.forEach(function(prop) {
+              var val = rnd[prop];
+              // Tier 1: field name exists in layer
+              if (actualFieldSet[val.toLowerCase()]) return;
+              // Tier 2: field name matches an alias
+              var aliasMatch = aliasByLower[val.toLowerCase()];
+              if (aliasMatch) {
+                rnd[prop] = aliasMatch;
+                remapped = true;
+                return;
+              }
+              // Tier 3 needed: async value-probe
+              needsProbe.push(prop);
+            });
+
+            if (remapped && needsProbe.length === 0) {
+              lyr.renderer = rnd.clone();
+              return;
+            }
+            if (needsProbe.length === 0) return;
+
+            // Tier 3: query features and find which field contains the
+            // renderer's expected unique values
+            var expectedValues = {};
+            if (rnd.uniqueValueInfos) {
+              rnd.uniqueValueInfos.forEach(function(uvi) {
+                if (uvi.value != null) expectedValues[String(uvi.value)] = true;
+              });
+            }
+            var expectedList = Object.keys(expectedValues);
+            if (expectedList.length === 0) return;
+
+            lyr.queryFeatures({ where: "1=1", num: 50, outFields: ["*"], returnGeometry: false }).then(function(fs) {
+              if (!fs.features || fs.features.length === 0) return;
+
+              // Score each string field by how many features match expected values
+              var fieldScores = {};
+              stringFields.forEach(function(fname) { fieldScores[fname] = 0; });
+              fs.features.forEach(function(f) {
+                stringFields.forEach(function(fname) {
+                  var v = f.attributes[fname];
+                  if (v != null && expectedValues[String(v)]) fieldScores[fname]++;
+                });
+              });
+
+              var bestField = null, bestScore = 0;
+              stringFields.forEach(function(fname) {
+                if (fieldScores[fname] > bestScore) {
+                  bestScore = fieldScores[fname];
+                  bestField = fname;
+                }
+              });
+
+              if (bestField && bestScore > 0) {
+                needsProbe.forEach(function(prop) { rnd[prop] = bestField; });
+
+                // Remap unique-value entries whose values don't match the data
+                var actualValues = {};
+                fs.features.forEach(function(f) {
+                  var v = f.attributes[bestField];
+                  if (v != null) actualValues[String(v)] = true;
+                });
+                var unmatchedRenderer = expectedList.filter(function(v) { return !actualValues[v]; });
+                var unmatchedData = Object.keys(actualValues).filter(function(v) { return !expectedValues[v]; });
+
+                if (unmatchedRenderer.length > 0 && unmatchedData.length > 0) {
+                  // Fuzzy match renderer values to data values via word-overlap
+                  function tokenize(s) {
+                    return s.toLowerCase()
+                      .replace(/(\d+\.\d+)/g, "_decimal_")
+                      .replace(/[^a-z0-9\s]/g, " ")
+                      .split(/\s+/)
+                      .filter(function(w) { return w.length > 1 || /^\d$/.test(w); })
+                      .filter(function(w) { return w !== "decimal"; });
+                  }
+                  var wordToNum = { one: "1", two: "2", three: "3", four: "4", five: "5",
+                                    six: "6", seven: "7", eight: "8", nine: "9", ten: "10" };
+                  function normalizeToken(w) { return wordToNum[w] || w; }
+                  function overlapScore(a, b) {
+                    var tokA = tokenize(a).map(normalizeToken);
+                    var tokB = tokenize(b).map(normalizeToken);
+                    var setA = {}, setB = {};
+                    tokA.forEach(function(t) { setA[t] = true; });
+                    tokB.forEach(function(t) { setB[t] = true; });
+                    var shared = 0;
+                    Object.keys(setA).forEach(function(t) { if (setB[t]) shared++; });
+                    var union = Object.keys(setA).length + Object.keys(setB).length - shared;
+                    return shared + (union > 0 ? shared / union * 0.99 : 0);
+                  }
+
+                  // Greedy best-match pairing
+                  var scoreboard = [];
+                  unmatchedRenderer.forEach(function(rv) {
+                    unmatchedData.forEach(function(dv) {
+                      scoreboard.push({ rv: rv, dv: dv, score: overlapScore(rv, dv) });
+                    });
+                  });
+                  scoreboard.sort(function(a, b) { return b.score - a.score; });
+                  var usedR = {}, usedD = {};
+                  var valueMap = {};
+                  scoreboard.forEach(function(item) {
+                    if (item.score < 1) return;
+                    if (usedR[item.rv] || usedD[item.dv]) return;
+                    valueMap[item.rv] = item.dv;
+                    usedR[item.rv] = true;
+                    usedD[item.dv] = true;
+                  });
+
+                  // Patch uniqueValueInfos with remapped values
+                  rnd.uniqueValueInfos.forEach(function(uvi) {
+                    if (valueMap[uvi.value]) {
+                      var oldVal = uvi.value;
+                      uvi.value = valueMap[oldVal];
+                      if (!uvi.label || uvi.label === oldVal) uvi.label = oldVal;
+                    }
+                  });
+                }
+
+                // Force the layer to re-apply the patched renderer
+                lyr.renderer = rnd.clone();
+                applyRendererToEntry(entry, lyr);
+                renderActiveLayerList();
+                updateLegend();
+              }
+            }).catch(function(err) {
+              console.warn("Renderer field probe failed for " + layerTitle + ":", err.message || err);
+            });
+          })();
+
+          var rnd = lyr.renderer;
+
+          // Handle edge case where renderer arrives after when() resolves
+          if (!rnd) {
+            reactiveUtils.whenOnce(function() { return lyr.renderer; }).then(function() {
+              applyRendererToEntry(entry, lyr);
+              renderActiveLayerList();
+              updateLegend();
+            });
+            return;
+          }
+
+          applyRendererToEntry(entry, lyr);
+          renderActiveLayerList();
+        }).catch(function(err) {
+          console.warn("Layer load failed:", layerTitle, err);
+        });
+      });
+      renderActiveLayerList(); // immediate render (swatches update after load)
+    }).catch(function(e) { console.warn("Failed to add layer:", e); });
+  }
+
+  // Helper: extract hex color from an SDK Color or array
+  function extractColor(c) {
+    if (!c) return null;
+    if (typeof c.toHex === "function") return c.toHex();
+    if (typeof c.r !== "undefined") {
+      return "#" + ((1<<24)+(c.r<<16)+(c.g<<8)+c.b).toString(16).slice(1);
+    }
+    if (Array.isArray(c) && c.length >= 3) {
+      return "#" + ((1<<24)+(c[0]<<16)+(c[1]<<8)+c[2]).toString(16).slice(1);
+    }
+    return null;
+  }
+
+  // ── Render active layer list with controls ──
+  function getLayerSwatchColor(entry) {
+    return entry._swatchColor || "#999999";
+  }
+
+  function getLayerGeomType(entry) {
+    var lyr = entry.layers[0];
+    if (!lyr) return "polygon";
+    // Check geometryType property (set after load)
+    if (lyr.geometryType) {
+      if (lyr.geometryType === "polyline") return "line";
+      if (lyr.geometryType === "point" || lyr.geometryType === "multipoint") return "point";
+      return "polygon";
+    }
+    // Fallback: check renderer symbol type
+    var rnd = lyr.renderer;
+    if (!rnd) return "polygon";
+    var sym = rnd.symbol || (rnd.uniqueValueInfos && rnd.uniqueValueInfos[0] && rnd.uniqueValueInfos[0].symbol)
+              || (rnd.classBreakInfos && rnd.classBreakInfos[0] && rnd.classBreakInfos[0].symbol)
+              || rnd.defaultSymbol;
+    if (!sym) return "polygon";
+    var t = sym.type || "";
+    if (t.indexOf("line") >= 0) return "line";
+    if (t.indexOf("marker") >= 0 || t === "text") return "point";
+    return "polygon";
+  }
+
+  function renderActiveLayerList() {
+    var el = document.getElementById("activeLayerList");
+    var clearBtn = document.getElementById("clearAllLayers");
+    if (activeLayers.length === 0) {
+      el.innerHTML = '<div class="ls-status" style="padding:8px 0;">No layers added</div>';
+      clearBtn.style.display = "none";
+      updateLegend();
+      return;
+    }
+    clearBtn.style.display = "";
+    el.innerHTML = activeLayers.map(function(a, idx) {
+      var opPct = Math.round(a.opacity * 100);
+      var swColor = a._swatchColor || "#999999";
+      var outColor = a._outlineColor || swColor;
+      var lineW = a._lineWidth || 2;
+      return '<div class="active-layer-card" data-idx="' + idx + '">'
+        + '<div class="alc-top">'
+        +   '<label class="alc-toggle"><input type="checkbox"' + (a.visible ? " checked" : "") + ' data-action="vis" data-idx="' + idx + '"><span class="slider"></span></label>'
+        +   '<span class="alc-name" data-action="rename" data-idx="' + idx + '" title="Double-click to rename">' + a.title + '</span>'
+        +   (a._hasComplexRenderer ? '<span class="alc-themed-badge" title="Layer uses themed symbology">Themed</span>' : '<button class="alc-style-btn" data-action="style" data-idx="' + idx + '" title="Change style"><span class="alc-swatch" style="background:' + swColor + '"></span>▾</button>')
+        +   '<button class="alc-remove" data-action="remove" data-idx="' + idx + '" title="Remove layer">✕</button>'
+        + '</div>'
+        + '<div class="alc-controls">'
+        +   '<label>Opacity</label>'
+        +   '<input type="range" min="0" max="100" value="' + opPct + '" data-action="opacity" data-idx="' + idx + '">'
+        +   '<span class="alc-pct" data-pct="' + idx + '">' + opPct + '%</span>'
+        + '</div>'
+        + (a._hasComplexRenderer ? '' :
+           '<div class="alc-style-panel" id="stylePanel-' + idx + '">'
+        +   '<div class="alc-style-row"><label>Fill</label><input type="color" value="' + swColor + '" data-action="sym-fill" data-idx="' + idx + '"></div>'
+        +   '<div class="alc-style-row"><label>Outline</label><input type="color" value="' + outColor + '" data-action="sym-outline" data-idx="' + idx + '"></div>'
+        +   '<div class="alc-style-row"><label>Width</label><input type="range" min="0" max="8" step="0.5" value="' + lineW + '" data-action="sym-width" data-idx="' + idx + '"><span class="alc-sw-pct">' + lineW + '</span></div>'
+        + '</div>')
+        + '</div>';
+    }).join("");
+    updateLegend();
+  }
+
+  // ── Delegated event handling for active layer controls ──
+  document.getElementById("activeLayerList").addEventListener("change", function(e) {
+    var t = e.target;
+    var idx = parseInt(t.dataset.idx, 10);
+    var entry = activeLayers[idx];
+    if (!entry) return;
+
+    if (t.dataset.action === "vis") {
+      entry.visible = t.checked;
+      entry.layers.forEach(function(l) { l.visible = t.checked; });
+    }
+  });
+
+  document.getElementById("activeLayerList").addEventListener("input", function(e) {
+    var t = e.target;
+    var idx = parseInt(t.dataset.idx, 10);
+    var entry = activeLayers[idx];
+    if (!entry) return;
+
+    if (t.dataset.action === "opacity") {
+      var val = parseInt(t.value, 10) / 100;
+      entry.opacity = val;
+      entry.layers.forEach(function(l) { l.opacity = val; });
+      var pctEl = document.querySelector('[data-pct="' + idx + '"]');
+      if (pctEl) pctEl.textContent = t.value + "%";
+    }
+    else if (t.dataset.action === "sym-fill") {
+      entry._swatchColor = t.value;
+      applyLayerSymbology(entry);
+      // Update swatch in card
+      var sw = e.target.closest(".active-layer-card").querySelector(".alc-swatch");
+      if (sw) sw.style.background = t.value;
+    }
+    else if (t.dataset.action === "sym-outline") {
+      entry._outlineColor = t.value;
+      applyLayerSymbology(entry);
+    }
+    else if (t.dataset.action === "sym-width") {
+      entry._lineWidth = parseFloat(t.value) || 1;
+      var wLabel = t.nextElementSibling;
+      if (wLabel) wLabel.textContent = t.value;
+      applyLayerSymbology(entry);
+    }
+    updateLegend();
+  });
+
+  function applyLayerSymbology(entry) {
+    if (entry._hasComplexRenderer) return; // never override themed renderers
+    var fill = entry._swatchColor || "#999999";
+    var outline = entry._outlineColor || fill;
+    var width = entry._lineWidth || 2;
+    var fr = parseInt(fill.slice(1,3),16), fg = parseInt(fill.slice(3,5),16), fb = parseInt(fill.slice(5,7),16);
+    var or_ = parseInt(outline.slice(1,3),16), og = parseInt(outline.slice(3,5),16), ob = parseInt(outline.slice(5,7),16);
+
+    entry.layers.forEach(function(lyr) {
+      if (!lyr.renderer || !lyr.renderer.symbol) return;
+      var sym = lyr.renderer.symbol;
+      var newSym = null;
+      if (sym.type === "simple-fill") {
+        newSym = {
+          type: "simple-fill",
+          color: [fr, fg, fb, sym.color ? (Array.isArray(sym.color) ? sym.color[3] : 0.15) : 0.15],
+          outline: { color: [or_, og, ob, 0.8], width: width, style: (sym.outline && sym.outline.style) || "solid" }
+        };
+      } else if (sym.type === "simple-line") {
+        newSym = { type: "simple-line", color: [fr, fg, fb, 0.8], width: width, style: sym.style || "solid" };
+      } else if (sym.type === "simple-marker") {
+        newSym = {
+          type: "simple-marker", style: sym.style || "circle",
+          color: [fr, fg, fb, 0.8], size: sym.size || 8,
+          outline: { color: [or_, og, ob, 1], width: width }
+        };
+      }
+      if (newSym) {
+        lyr.renderer = { type: "simple", symbol: newSym };
+      }
+    });
+  }
+
+  document.getElementById("activeLayerList").addEventListener("click", function(e) {
+    // Style panel toggle
+    var styleBtn = e.target.closest('[data-action="style"]');
+    if (styleBtn) {
+      var idx = parseInt(styleBtn.dataset.idx, 10);
+      var panel = document.getElementById("stylePanel-" + idx);
+      if (panel) panel.classList.toggle("open");
+      return;
+    }
+    var btn = e.target.closest('[data-action="remove"]');
+    if (!btn) return;
+    var idx = parseInt(btn.dataset.idx, 10);
+    var entry = activeLayers[idx];
+    if (entry) {
+      entry.layers.forEach(function(l) { map.remove(l); });
+      activeLayers.splice(idx, 1);
+      renderActiveLayerList();
+    }
+  });
+
+  // ── Double-click to rename layer ──
+  document.getElementById("activeLayerList").addEventListener("dblclick", function(e) {
+    var nameEl = e.target.closest('[data-action="rename"]');
+    if (!nameEl) return;
+    var idx = parseInt(nameEl.dataset.idx, 10);
+    var entry = activeLayers[idx];
+    if (!entry) return;
+    // Replace span with input
+    var input = document.createElement("input");
+    input.type = "text";
+    input.className = "alc-name-input";
+    input.value = entry.title;
+    nameEl.replaceWith(input);
+    input.focus();
+    input.select();
+    function commitRename() {
+      var newName = input.value.trim() || entry.title;
+      entry.title = newName;
+      renderActiveLayerList();
+      updateLegend();
+    }
+    input.addEventListener("blur", commitRename);
+    input.addEventListener("keydown", function(ev) {
+      if (ev.key === "Enter") { ev.preventDefault(); input.blur(); }
+      if (ev.key === "Escape") { input.value = entry.title; input.blur(); }
+    });
+  });
+
+  // ── Clear All button ──
+  document.getElementById("clearAllLayers").addEventListener("click", function() {
+    activeLayers.slice().forEach(function(entry) {
+      entry.layers.forEach(function(l) { map.remove(l); });
+    });
+    activeLayers = [];
+    state.layerRefs = [];
+    renderActiveLayerList();
+  });
+
+  // ══════════════════════════════════════════════════════════════
+  // LEGEND — dynamic, togglable, included in exports
+  // ══════════════════════════════════════════════════════════════
+  var legendVisible = false;
+  // Expose for PDF export (runs in outer scope)
+  Object.defineProperty(window, '_legendVisible', { get: function() { return legendVisible; } });
+  var legendOverlay = document.getElementById("legendOverlay");
+
+  document.getElementById("legendToggleBtn").addEventListener("click", function() {
+    legendVisible = !legendVisible;
+    legendOverlay.classList.toggle("visible", legendVisible);
+    this.classList.toggle("active", legendVisible);
+    document.getElementById("legendToggleLabel").textContent = legendVisible ? "Hide Legend" : "Show Legend";
+    if (legendVisible) updateLegend();
+  });
+  document.getElementById("legendClose").addEventListener("click", function() {
+    legendVisible = false;
+    legendOverlay.classList.remove("visible");
+    document.getElementById("legendToggleBtn").classList.remove("active");
+    document.getElementById("legendToggleLabel").textContent = "Show Legend";
+  });
+
+  function updateLegend() {
+    if (!legendVisible) return;
+    var body = document.getElementById("legendBody");
+    var items = getLegendItems();
+    if (items.length === 0) {
+      body.innerHTML = '<div class="ls-status" style="padding:8px 0;">No visible items</div>';
+      return;
+    }
+    body.innerHTML = items.map(function(d) {
+      return '<div class="legend-item"><span class="legend-swatch' + (d.cls || '') + '" style="background:' + d.color + ';"></span><span class="legend-label">' + d.label + '</span></div>';
+    }).join("");
+  }
+
+  // Build legend data for export compositing (returns array of items)
+  function getLegendItems() {
+    var items = [];
+    activeLayers.filter(function(a) { return a.visible; }).forEach(function(a) {
+      var geom = getLayerGeomType(a);
+      var cls = geom === "line" ? " line" : geom === "point" ? " point" : "";
+      // For complex renderers, show each unique value / class break as a separate legend entry
+      var lyr = a.layers[0];
+      if (a._hasComplexRenderer && lyr && lyr.renderer) {
+        var rnd = lyr.renderer;
+        var infos = rnd.uniqueValueInfos || rnd.classBreakInfos || [];
+        if (infos.length > 0) {
+          infos.forEach(function(info) {
+            var sym = info.symbol;
+            var c = extractColor(sym && sym.color) || extractColor(sym && sym.outline && sym.outline.color) || "#999999";
+            var lbl = info.label || info.value || a.title;
+            items.push({ color: c, label: lbl, cls: cls });
+          });
+          return; // skip the default single-swatch entry
+        }
+      }
+      items.push({ color: a._swatchColor || "#999999", label: a.title, cls: cls });
+    });
+    drawingsLayer.graphics.forEach(function(g) {
+      if (g.attributes && g.attributes._isLabel) return;
+      var sym = g.symbol; if (!sym) return;
+      var color = "#C8A94E";
+      var c = sym.color;
+      if (c && Array.isArray(c)) color = "#" + ((1<<24)+(c[0]<<16)+(c[1]<<8)+c[2]).toString(16).slice(1);
+      else if (c && typeof c.toHex === "function") color = c.toHex();
+      var label = "";
+      if (sym.type === "text") label = sym.text || "Text";
+      else if (g.attributes && g.attributes._label) label = g.attributes._label;
+      else { var gt = g.geometry ? g.geometry.type : "shape"; label = gt.charAt(0).toUpperCase() + gt.slice(1); }
+      var cls = "";
+      if (sym.type === "simple-line") cls = " line";
+      else if (sym.type === "simple-marker" || sym.type === "text") cls = " point";
+      items.push({ color: color, label: label, cls: cls });
+    });
+    return items;
+  }
+  window._getLegendItems = getLegendItems;
+
+  // Draw legend onto a canvas context (for export compositing)
+  window._drawLegendOnCanvas = function(ctx, x, y, maxW) {
+    if (!legendVisible) return;
+    var items = getLegendItems();
+    if (items.length === 0) return;
+    var lineH = 18, padX = 10, padY = 8, swatchW = 14, swatchH = 10;
+    var totalH = padY * 2 + items.length * lineH;
+    var w = Math.min(maxW || 180, 180);
+
+    ctx.save();
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.strokeStyle = "rgba(0,0,0,0.12)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, w, totalH, 6); else ctx.rect(x, y, w, totalH);
+    ctx.fill(); ctx.stroke();
+
+    var cy = y + padY;
+    items.forEach(function(item) {
+      ctx.fillStyle = item.color;
+      ctx.fillRect(x + padX, cy + 2, swatchW, swatchH);
+      ctx.strokeStyle = "rgba(0,0,0,0.1)"; ctx.lineWidth = 0.5;
+      ctx.strokeRect(x + padX, cy + 2, swatchW, swatchH);
+      ctx.fillStyle = "#2A2A25"; ctx.font = "11px DM Sans, sans-serif";
+      ctx.fillText(item.label, x + padX + swatchW + 6, cy + 11);
+      cy += lineH;
+    });
+    ctx.restore();
+  };
+
+  // ── Basemap selector ──
+  document.getElementById("basemapGrid").addEventListener("click", function(e) {
+    var btn = e.target.closest(".basemap-opt");
+    if (!btn) return;
+    var bmId = btn.dataset.bm;
+    map.basemap = bmId;
+    document.querySelectorAll(".basemap-opt").forEach(function(b) { b.classList.remove("active"); });
+    btn.classList.add("active");
+  });
+
+  window.addEventListener('resize', function() {
+    clearTimeout(window._rt);
+    window._rt = setTimeout(function() { if (state.overlayVisible) updateOverlay(); }, 150);
+  });
+
+});
+</script>
+
+<!-- ══════════════════════ GUIDED TOUR STYLES ══════════════════════ -->
+<style>
+  /* Help button in header */
+  .help-btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 11px;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(232,209,142,0.35);
+    border-radius: 20px;
+    color: var(--gold-warm);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 11.5px; font-weight: 600; letter-spacing: 0.3px;
+    cursor: pointer;
+    transition: all var(--transition);
+  }
+  .help-btn:hover {
+    background: var(--gold);
+    border-color: var(--gold);
+    color: var(--forest);
+  }
+  .help-btn svg { flex-shrink: 0; }
+
+  /* Welcome card in side panel (first-run, non-modal) */
+  .tour-welcome-card {
+    background: linear-gradient(135deg, var(--cream) 0%, var(--cream-dark) 100%);
+    border-left: 4px solid var(--gold);
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+    margin: 14px 14px 0 14px;
+    position: relative;
+    animation: tourFadeIn 0.4s ease-out;
+  }
+  .tour-welcome-card h4 {
+    font-family: 'Playfair Display', serif;
+    font-size: 15px; font-weight: 600;
+    color: var(--forest); margin-bottom: 4px;
+  }
+  .tour-welcome-card p {
+    font-size: 12px; color: var(--text-mid);
+    line-height: 1.45; margin-bottom: 10px;
+  }
+  .tour-welcome-card .tour-card-actions { display: flex; gap: 8px; }
+  .tour-welcome-card button {
+    flex: 1; padding: 7px 10px;
+    font-family: 'DM Sans', sans-serif; font-size: 12px; font-weight: 600;
+    border-radius: var(--radius-sm); cursor: pointer;
+    transition: all var(--transition);
+  }
+  .tour-welcome-card .tour-start {
+    background: var(--forest); color: var(--white);
+    border: 1px solid var(--forest);
+  }
+  .tour-welcome-card .tour-start:hover { background: var(--forest-light); }
+  .tour-welcome-card .tour-dismiss {
+    background: transparent; color: var(--text-mid);
+    border: 1px solid var(--cream-dark);
+  }
+  .tour-welcome-card .tour-dismiss:hover {
+    background: var(--white); color: var(--text-dark);
+  }
+  @keyframes tourFadeIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Override Shepherd styling to match CoFOR palette */
+  .shepherd-element.cofor-tour {
+    font-family: 'DM Sans', system-ui, sans-serif;
+    max-width: 360px;
+    border-radius: var(--radius);
+    box-shadow: 0 8px 32px rgba(27,58,45,0.28), 0 2px 8px rgba(27,58,45,0.15);
+    border: 1px solid var(--cream-dark);
+    background: var(--white);
+  }
+  .shepherd-element.cofor-tour .shepherd-arrow::before {
+    background: var(--white);
+    border: 1px solid var(--cream-dark);
+  }
+  .shepherd-element.cofor-tour .shepherd-header {
+    background: var(--forest);
+    padding: 12px 18px;
+    border-top-left-radius: var(--radius);
+    border-top-right-radius: var(--radius);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .shepherd-element.cofor-tour .shepherd-title {
+    font-family: 'Playfair Display', serif;
+    font-weight: 600; font-size: 15px;
+    color: var(--cream);
+    letter-spacing: 0.2px;
+  }
+  .shepherd-element.cofor-tour .shepherd-cancel-icon {
+    color: var(--gold-warm);
+    font-size: 20px; line-height: 1;
+    transition: color var(--transition);
+  }
+  .shepherd-element.cofor-tour .shepherd-cancel-icon:hover { color: var(--white); }
+
+  .shepherd-element.cofor-tour .shepherd-text {
+    padding: 16px 18px 6px 18px;
+    font-size: 13.5px; line-height: 1.55;
+    color: var(--text-dark);
+  }
+  .shepherd-element.cofor-tour .shepherd-text strong { color: var(--forest); font-weight: 600; }
+  .shepherd-element.cofor-tour .shepherd-text code {
+    background: var(--cream);
+    padding: 1px 5px; border-radius: 3px;
+    font-size: 12px; color: var(--bark);
+    font-family: Menlo, Consolas, monospace;
+  }
+
+  .shepherd-element.cofor-tour .shepherd-footer {
+    padding: 10px 18px 14px 18px;
+    border-top: 1px solid var(--cream-dark);
+    margin-top: 8px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .shepherd-element.cofor-tour .tour-progress {
+    font-size: 11px; font-weight: 600;
+    color: var(--stone);
+    letter-spacing: 0.5px;
+    margin-right: auto;
+  }
+  .shepherd-element.cofor-tour .shepherd-button {
+    font-family: 'DM Sans', sans-serif;
+    font-size: 12.5px; font-weight: 600;
+    padding: 7px 14px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all var(--transition);
+  }
+  .shepherd-element.cofor-tour .shepherd-button.tour-btn-secondary {
+    background: transparent;
+    color: var(--text-mid);
+    border-color: var(--cream-dark);
+  }
+  .shepherd-element.cofor-tour .shepherd-button.tour-btn-secondary:hover {
+    background: var(--cream);
+    color: var(--text-dark);
+  }
+  .shepherd-element.cofor-tour .shepherd-button.tour-btn-primary {
+    background: var(--forest);
+    color: var(--white);
+    border-color: var(--forest);
+  }
+  .shepherd-element.cofor-tour .shepherd-button.tour-btn-primary:hover {
+    background: var(--forest-light);
+    box-shadow: 0 2px 8px rgba(27,58,45,0.25);
+    transform: translateY(-1px);
+  }
+
+  /* Modal overlay dims the page */
+  .shepherd-modal-overlay-container {
+    fill: rgba(27,58,45,0.45);
+    transition: opacity var(--transition);
+  }
+
+  /* Highlighted target element */
+  .shepherd-target-click-disabled { cursor: default !important; }
+  .shepherd-enabled.shepherd-target {
+    box-shadow: 0 0 0 3px var(--gold), 0 0 0 6px rgba(200,169,78,0.3);
+    border-radius: var(--radius-sm);
+    transition: box-shadow var(--transition);
+  }
+</style>
+
+<!-- ══════════════════════ GUIDED TOUR LOGIC ══════════════════════ -->
+<script>
+(function() {
+  'use strict';
+
+  const TOUR_STORAGE_KEY = 'cofor_mapexport_tour_seen_v1';
+  const NARROW_BREAKPOINT = 800;
+
+  // ─── Check if we should skip tour entirely (narrow screens) ───
+  function isNarrowScreen() {
+    return window.innerWidth < NARROW_BREAKPOINT;
+  }
+
+  // ─── Tour step definitions ───
+  // Keyed to the exact selectors in the deployed markup.
+  function buildTour() {
+    const tour = new Shepherd.Tour({
+      useModalOverlay: true,
+      defaultStepOptions: {
+        classes: 'cofor-tour',
+        scrollTo: { behavior: 'smooth', block: 'center' },
+        cancelIcon: { enabled: true },
+        arrow: true,
+        modalOverlayOpeningPadding: 4,
+        modalOverlayOpeningRadius: 6
+      }
+    });
+
+    const steps = [
+      {
+        id: 'welcome',
+        title: 'Welcome to Map Export',
+        text:
+          '<p>This quick tour walks through the five-step workflow for building and exporting a map. It takes about a minute.</p>' +
+          '<p style="margin-top:8px;color:var(--text-mid);font-size:12.5px;">You can exit anytime with the ✕ or the <em>Esc</em> key, and restart the tour from the <strong>Help</strong> button in the header.</p>',
+        buttons: [
+          { text: 'Skip', classes: 'tour-btn-secondary', action: function() { this.cancel(); } },
+          { text: 'Start tour  →', classes: 'tour-btn-primary', action: function() { this.next(); } }
+        ]
+      },
+      {
+        id: 'mode',
+        title: '1. Pick the export mode',
+        attachTo: { element: '.mode-toggle', on: 'right' },
+        text: '<p>Start here. Choose <strong>Print PDF</strong> for a map with a full title block, or <strong>Digital PNG</strong> for a clean image sized for presentations and social media.</p>',
+        buttons: stdButtons()
+      },
+      {
+        id: 'paper',
+        title: '2. Set the paper or preset',
+        attachTo: { element: '#printSettings', on: 'right' },
+        text: '<p>Pick paper size (Letter or Tabloid) and orientation. Digital mode shows three aspect-ratio presets instead.</p><p style="margin-top:6px;">This controls the shape of the export frame you will place in step 4.</p>',
+        buttons: stdButtons()
+      },
+      {
+        id: 'basemap',
+        title: '3. Choose a basemap',
+        attachTo: { element: '#basemapGrid', on: 'right' },
+        text: '<p>OpenStreetMap is the default. Satellite, Hybrid, Topographic, and Light/Dark canvas styles are all available.</p>',
+        buttons: stdButtons()
+      },
+      {
+        id: 'details',
+        title: '4. Fill in your map details',
+        attachTo: { element: '#mapTitle', on: 'right' },
+        text: '<p>Title, subtitle, and department print into the PDF title block. Skip for PNG — digital exports only get a small corner watermark.</p>',
+        buttons: stdButtons()
+      },
+      {
+        id: 'layers',
+        title: '5. Search and add layers',
+        attachTo: { element: '#layerSearchInput', on: 'right' },
+        text:
+          '<p>Type any part of a layer name to search every public Feature Service in the City\'s ArcGIS Online org.</p>' +
+          '<p style="margin-top:6px;">Three default layers are already loaded: <strong>Property Boundaries</strong>, <strong>Road Centerlines</strong>, and <strong>Jurisdictional Boundaries</strong>.</p>',
+        buttons: stdButtons()
+      },
+      {
+        id: 'layer-controls',
+        title: 'Layer controls',
+        attachTo: { element: '#activeLayerList', on: 'right' },
+        text:
+          '<p>Each layer card has a visibility toggle, opacity slider, and style button (▾). <strong>Double-click the name</strong> to rename it — the new name shows up in the legend and exports.</p>' +
+          '<p style="margin-top:6px;color:var(--text-mid);font-size:12.5px;">Layers with a <em>Themed</em> badge (like Zoning) keep their ArcGIS Online symbology locked.</p>',
+        buttons: stdButtons()
+      },
+      {
+        id: 'drawing',
+        title: 'Drawings and annotations (optional)',
+        attachTo: { element: '#drawingToggle', on: 'right' },
+        text: '<p>Flip this switch to reveal point, line, rectangle, polygon, and text tools. Click any shape you\'ve drawn to edit its color, add a label, or delete it.</p>',
+        buttons: stdButtons()
+      },
+      {
+        id: 'legend',
+        title: 'Legend',
+        attachTo: { element: '#legendToggleBtn', on: 'top' },
+        text: '<p>Shows a floating legend of every visible layer and drawing. <strong>If the legend is visible when you export, it bakes into the output</strong> — toggle it off first if you don\'t want it.</p>',
+        buttons: stdButtons()
+      },
+      {
+        id: 'frame',
+        title: '6. Enable the export frame',
+        attachTo: { element: '#overlayToggle', on: 'top' },
+        text:
+          '<p>Click this to display the gold-bordered export frame on the map. Drag the edges to move it, drag the corners to resize (aspect ratio stays locked).</p>' +
+          '<p style="margin-top:6px;"><strong>The export button stays disabled until the frame is visible.</strong></p>',
+        buttons: stdButtons()
+      },
+      {
+        id: 'export',
+        title: '7. Export',
+        attachTo: { element: '#exportPrimary', on: 'top' },
+        text: '<p>Click here to download your map as PDF or PNG. The filename is timestamped automatically.</p>',
+        buttons: stdButtons()
+      },
+      {
+        id: 'done',
+        title: 'You\'re set',
+        text:
+          '<p>That\'s the whole workflow. A few things worth remembering:</p>' +
+          '<ul style="margin:8px 0 0 18px;font-size:13px;line-height:1.7;color:var(--text-dark);">' +
+            '<li>Click any parcel for address + owner info.</li>' +
+            '<li>Replay this tour anytime from the <strong>Help</strong> button.</li>' +
+            '<li>Need the full reference? Ask GIS for the user guide.</li>' +
+          '</ul>',
+        buttons: [
+          { text: 'Finish', classes: 'tour-btn-primary', action: function() { this.complete(); } }
+        ]
+      }
+    ];
+
+    // Helper: standard Back / Next buttons with progress label
+    function stdButtons() {
+      return [
+        { text: '← Back', classes: 'tour-btn-secondary', action: function() { this.back(); } },
+        { text: 'Next  →', classes: 'tour-btn-primary', action: function() { this.next(); } }
+      ];
+    }
+
+    // Attach progress label to each step
+    steps.forEach(function(step, idx) {
+      const total = steps.length;
+      const baseWhen = step.when || {};
+      step.when = Object.assign({}, baseWhen, {
+        show: function() {
+          const footer = this.el && this.el.querySelector('.shepherd-footer');
+          if (footer && !footer.querySelector('.tour-progress')) {
+            const label = document.createElement('span');
+            label.className = 'tour-progress';
+            label.textContent = 'STEP ' + (idx + 1) + ' OF ' + total;
+            footer.insertBefore(label, footer.firstChild);
+          }
+        }
+      });
+      tour.addStep(step);
+    });
+
+    // Mark as seen on complete or cancel so it doesn't auto-fire next visit
+    tour.on('complete', markTourSeen);
+    tour.on('cancel', markTourSeen);
+
+    return tour;
+  }
+
+  function markTourSeen() {
+    try { localStorage.setItem(TOUR_STORAGE_KEY, '1'); } catch (e) { /* ignore */ }
+  }
+
+  function tourHasBeenSeen() {
+    try { return localStorage.getItem(TOUR_STORAGE_KEY) === '1'; } catch (e) { return false; }
+  }
+
+  function startTour() {
+    // Close any map popups / editors that would interfere with positioning
+    try {
+      const ge = document.getElementById('graphicEditor');
+      if (ge) ge.style.display = 'none';
+    } catch (e) {}
+    const tour = buildTour();
+    tour.start();
+  }
+
+  // ─── Welcome card: non-intrusive first-run prompt in the side panel ───
+  function showWelcomeCard() {
+    const panel = document.querySelector('.side-panel');
+    if (!panel) return;
+
+    // Avoid duplicating if already present
+    if (document.querySelector('.tour-welcome-card')) return;
+
+    const card = document.createElement('div');
+    card.className = 'tour-welcome-card';
+    card.innerHTML =
+      '<h4>First time here?</h4>' +
+      '<p>Take a quick guided tour to learn the five-step export workflow. About a minute.</p>' +
+      '<div class="tour-card-actions">' +
+        '<button class="tour-start" type="button">Take the tour</button>' +
+        '<button class="tour-dismiss" type="button">No thanks</button>' +
+      '</div>';
+
+    // Insert at the very top of the side panel
+    panel.insertBefore(card, panel.firstChild);
+
+    card.querySelector('.tour-start').addEventListener('click', function() {
+      card.remove();
+      startTour();
+    });
+    card.querySelector('.tour-dismiss').addEventListener('click', function() {
+      card.remove();
+      markTourSeen();
+    });
+  }
+
+  // ─── Wire up the header Help button ───
+  function wireHelpButton() {
+    const btn = document.getElementById('helpBtn');
+    if (!btn) return;
+    btn.addEventListener('click', function() {
+      // Remove welcome card if it's still open
+      const card = document.querySelector('.tour-welcome-card');
+      if (card) card.remove();
+      startTour();
+    });
+  }
+
+  // ─── Bootstrap ───
+  function init() {
+    // Guard against missing Shepherd (CDN blocked, etc.)
+    if (typeof Shepherd === 'undefined') {
+      console.warn('[Tour] Shepherd.js not available — tour disabled.');
+      const btn = document.getElementById('helpBtn');
+      if (btn) btn.style.display = 'none';
+      return;
+    }
+
+    wireHelpButton();
+
+    // Skip auto-prompt on narrow screens (side panel becomes a drawer,
+    // positioning gets weird). Help button still works if user taps it.
+    if (isNarrowScreen()) return;
+
+    if (!tourHasBeenSeen()) {
+      // Wait a beat so the app has rendered and AGOL layers are loading
+      setTimeout(showWelcomeCard, 1200);
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+</body>
+</html>
