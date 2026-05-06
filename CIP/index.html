@@ -1,0 +1,1676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>City of Fair Oaks Ranch — Capital Improvement Projects</title>
+<meta name="description" content="Interactive map of City of Fair Oaks Ranch capital improvement projects synchronized from ClearGov.">
+
+<!-- Favicon -->
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+
+<!-- Fonts: Playfair Display (display) + DM Sans (body) — CFOR public app standard -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;500;600;700&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- ArcGIS JS SDK 4.34 — loads LAST per AMD load order rule -->
+<link rel="stylesheet" href="https://js.arcgis.com/4.34/esri/themes/light/main.css">
+
+<style>
+/* ============================================================================
+   CFOR Public App Theme
+   Cream #FAF8F4 background / Forest Green #1B3A2D primary
+   Playfair Display (headings) + DM Sans (body)
+   ============================================================================ */
+
+:root {
+  /* CFOR Public app palette */
+  --bg-cream: #FAF8F4;
+  --bg-cream-dim: #F2EEE5;
+  --forest-green: #1B3A2D;
+  --forest-green-soft: #2A5240;
+  --ink: #1A1A1A;
+  --ink-soft: #4A4A4A;
+  --ink-muted: #8A8A8A;
+  --line: #E5E0D5;
+  --line-strong: #C9C2B3;
+
+  /* CFOR Brand */
+  --olive: #8D956C;
+  --dark-blue: #192737;
+  --tan: #D4CA96;
+  --light-blue: #B0C1C9;
+  --red: #A64850;
+  --dark-olive: #717C60;
+
+  /* Category Colors */
+  --cat-water: #B0C1C9;
+  --cat-wastewater: #192737;
+  --cat-roadway: #8D956C;
+  --cat-drainage: #717C60;
+  --cat-building: #A64850;
+
+  /* Layout */
+  --header-height: 64px;
+  --panel-width: 380px;
+  --radius: 4px;
+  --radius-lg: 8px;
+
+  /* Type */
+  --font-display: 'Playfair Display', Georgia, serif;
+  --font-body: 'DM Sans', -apple-system, sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font-body);
+  background: var(--bg-cream);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button, input { font-family: inherit; font-size: inherit; color: inherit; }
+
+/* ============================================================================
+   HEADER
+   ============================================================================ */
+
+#app-header {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: var(--header-height);
+  background: var(--forest-green);
+  color: var(--bg-cream);
+  display: flex;
+  align-items: center;
+  padding: 0 24px;
+  z-index: 1000;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+#app-logo {
+  height: 40px;
+  width: 40px;
+  margin-right: 16px;
+  flex-shrink: 0;
+}
+
+#app-logo img, #app-logo svg {
+  height: 100%;
+  width: 100%;
+  display: block;
+}
+
+#app-title-block {
+  flex: 1;
+  min-width: 0;
+}
+
+#app-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 19px;
+  letter-spacing: 0.01em;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#app-subtitle {
+  font-size: 11px;
+  font-weight: 400;
+  opacity: 0.75;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#header-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: 16px;
+}
+
+.header-btn {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  color: var(--bg-cream);
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.03em;
+  transition: background 150ms ease;
+  white-space: nowrap;
+}
+
+.header-btn:hover { background: rgba(255,255,255,0.15); }
+
+/* ============================================================================
+   MAIN LAYOUT
+   ============================================================================ */
+
+#app-main {
+  position: fixed;
+  top: var(--header-height);
+  left: 0; right: 0; bottom: 0;
+  display: grid;
+  grid-template-columns: 1fr var(--panel-width);
+}
+
+#map-area {
+  position: relative;
+  background: var(--bg-cream-dim);
+  overflow: hidden;
+}
+
+arcgis-map {
+  width: 100%;
+  height: 100%;
+}
+
+/* ============================================================================
+   STATS PANEL (top-left, collapsible)
+   ============================================================================ */
+
+#stats-panel {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 100;
+  background: var(--bg-cream);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  overflow: hidden;
+  transition: max-height 250ms ease, max-width 250ms ease;
+  max-width: 300px;
+  font-family: var(--font-body);
+}
+
+#stats-panel.collapsed {
+  max-width: 48px;
+  max-height: 48px;
+}
+
+#stats-panel.collapsed .stats-body { display: none; }
+
+#stats-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: var(--forest-green);
+  color: var(--bg-cream);
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+#stats-panel.collapsed #stats-toggle {
+  padding: 14px;
+  justify-content: center;
+}
+
+#stats-panel.collapsed .stats-toggle-label { display: none; }
+
+.stats-toggle-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.stats-body { padding: 16px 18px 18px; }
+
+.stats-section { margin-bottom: 16px; }
+.stats-section:last-child { margin-bottom: 0; }
+
+.stats-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  margin-bottom: 4px;
+}
+
+.stats-value {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--forest-green);
+  line-height: 1.1;
+}
+
+.stats-value-sub {
+  font-size: 12px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+
+.stats-progress-bar {
+  height: 6px;
+  background: var(--bg-cream-dim);
+  border-radius: 3px;
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.stats-progress-fill {
+  height: 100%;
+  background: var(--forest-green);
+  border-radius: 3px;
+  transition: width 400ms ease;
+}
+
+.stats-categories {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stats-cat-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.stats-cat-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.stats-cat-name {
+  flex: 1;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.stats-cat-count {
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-footer {
+  font-size: 10px;
+  color: var(--ink-muted);
+  letter-spacing: 0.04em;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+  margin-top: 14px;
+}
+
+/* ============================================================================
+   DIRECTORY PANEL (right, 380px)
+   ============================================================================ */
+
+#directory-panel {
+  background: var(--bg-cream);
+  border-left: 1px solid var(--line-strong);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.directory-header {
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg-cream);
+  flex-shrink: 0;
+}
+
+.directory-title {
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--forest-green);
+  margin-bottom: 2px;
+  letter-spacing: 0.01em;
+}
+
+.directory-subtitle {
+  font-size: 11px;
+  color: var(--ink-muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.search-wrap {
+  position: relative;
+  margin-top: 12px;
+}
+
+#directory-search {
+  width: 100%;
+  padding: 9px 14px 9px 34px;
+  background: var(--bg-cream-dim);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  font-size: 13px;
+  transition: border-color 150ms ease;
+}
+
+#directory-search:focus {
+  outline: none;
+  border-color: var(--forest-green);
+  background: white;
+}
+
+.search-icon {
+  position: absolute;
+  top: 50%;
+  left: 11px;
+  transform: translateY(-50%);
+  color: var(--ink-muted);
+  pointer-events: none;
+  width: 14px;
+  height: 14px;
+}
+
+.filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.filter-chip {
+  background: transparent;
+  border: 1px solid var(--line-strong);
+  color: var(--ink-soft);
+  padding: 4px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  transition: all 150ms ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.filter-chip:hover {
+  border-color: var(--forest-green);
+  color: var(--forest-green);
+}
+
+.filter-chip.active {
+  background: var(--forest-green);
+  border-color: var(--forest-green);
+  color: var(--bg-cream);
+}
+
+.filter-chip .chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+#directory-list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.directory-item {
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  transition: background 120ms ease;
+  position: relative;
+}
+
+.directory-item:hover {
+  background: var(--bg-cream-dim);
+}
+
+.directory-item.selected {
+  background: var(--bg-cream-dim);
+}
+
+.directory-item.selected::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--forest-green);
+}
+
+.di-name {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.35;
+  margin-bottom: 4px;
+}
+
+.di-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--ink-soft);
+}
+
+.di-cat-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--bg-cream-dim);
+  font-weight: 500;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.di-cat-badge .cat-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.di-status-pill {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+
+.di-status-pill.current {
+  background: rgba(141,149,108,0.15);
+  color: var(--olive);
+}
+
+.di-status-pill.completed {
+  background: rgba(27,58,45,0.10);
+  color: var(--forest-green);
+}
+
+.di-progress {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.di-progress-bar {
+  flex: 1;
+  height: 4px;
+  background: var(--bg-cream-dim);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.di-progress-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 300ms ease;
+}
+
+.di-progress-pct {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  min-width: 28px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.di-budget {
+  font-size: 11px;
+  color: var(--ink-muted);
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+#directory-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--ink-muted);
+  font-size: 13px;
+  font-style: italic;
+}
+
+#directory-loading {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--ink-muted);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* ============================================================================
+   POPUP STYLING (overrides for ArcGIS popup)
+   ============================================================================ */
+
+.cip-popup {
+  font-family: var(--font-body);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.cip-popup-header {
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.cip-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.cip-badge.cat {
+  background: var(--bg-cream-dim);
+  color: var(--ink);
+}
+
+.cip-badge .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.cip-badge.status-current {
+  background: rgba(141,149,108,0.15);
+  color: var(--olive);
+}
+
+.cip-badge.status-completed {
+  background: rgba(27,58,45,0.12);
+  color: var(--forest-green);
+}
+
+.cip-section {
+  margin-bottom: 12px;
+}
+
+.cip-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  margin-bottom: 4px;
+}
+
+.cip-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cip-progress-bar {
+  flex: 1;
+  height: 8px;
+  background: var(--bg-cream-dim);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.cip-progress-fill {
+  height: 100%;
+  border-radius: 4px;
+}
+
+.cip-progress-pct {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--forest-green);
+  min-width: 38px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.cip-budget-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.cip-budget-cell {
+  background: var(--bg-cream-dim);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+}
+
+.cip-budget-cell-label {
+  font-size: 10px;
+  color: var(--ink-muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.cip-budget-cell-value {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--forest-green);
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cip-meta-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.cip-meta-row .label {
+  color: var(--ink-muted);
+}
+
+.cip-meta-row .value {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.cip-description {
+  font-size: 12px;
+  color: var(--ink-soft);
+  line-height: 1.6;
+}
+
+/* Override Esri popup wrapper for our brand */
+.esri-popup__main-container {
+  border-radius: var(--radius-lg) !important;
+  font-family: var(--font-body) !important;
+}
+
+.esri-popup__header-title {
+  font-family: var(--font-display) !important;
+  font-weight: 600 !important;
+  color: var(--forest-green) !important;
+}
+
+/* ============================================================================
+   MOBILE RESPONSIVE
+   ============================================================================ */
+
+#mobile-toggle {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  :root {
+    --header-height: 56px;
+  }
+
+  #app-title { font-size: 16px; }
+  #app-subtitle { font-size: 10px; }
+  #app-logo { height: 32px; width: 32px; margin-right: 12px; }
+  #app-header { padding: 0 14px; }
+  .header-btn { padding: 6px 10px; font-size: 11px; }
+
+  #app-main {
+    grid-template-columns: 1fr;
+    grid-template-rows: 1fr auto;
+  }
+
+  #directory-panel {
+    border-left: none;
+    border-top: 1px solid var(--line-strong);
+    max-height: 50vh;
+    transition: max-height 250ms ease;
+  }
+
+  #directory-panel.collapsed {
+    max-height: 56px;
+  }
+
+  #directory-panel.collapsed #directory-list,
+  #directory-panel.collapsed .filter-row,
+  #directory-panel.collapsed .search-wrap,
+  #directory-panel.collapsed .directory-subtitle {
+    display: none;
+  }
+
+  #mobile-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    top: 8px;
+    right: 14px;
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    cursor: pointer;
+    color: var(--ink-soft);
+  }
+
+  #stats-panel {
+    top: 8px;
+    left: 8px;
+    max-width: 240px;
+  }
+
+  #stats-panel.collapsed { max-width: 40px; max-height: 40px; }
+  #stats-toggle { padding: 9px 11px; font-size: 10px; }
+  .stats-value { font-size: 20px; }
+}
+
+/* ============================================================================
+   LOADING & UTILITIES
+   ============================================================================ */
+
+#app-loading {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-cream);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  transition: opacity 400ms ease;
+}
+
+#app-loading.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--line);
+  border-top-color: var(--forest-green);
+  border-radius: 50%;
+  animation: spin 800ms linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Scrollbar styling */
+#directory-list::-webkit-scrollbar { width: 8px; }
+#directory-list::-webkit-scrollbar-track { background: transparent; }
+#directory-list::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 4px;
+}
+#directory-list::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-muted);
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================================
+     APP LOADING OVERLAY
+     ============================================================================ -->
+<div id="app-loading">
+  <div class="loading-spinner"></div>
+</div>
+
+<!-- ============================================================================
+     HEADER
+     ============================================================================ -->
+<header id="app-header">
+  <div id="app-logo">
+    <!--
+      LOGO PLACEHOLDER:
+      Replace this <img> tag's src with the LOGO_DATA_URI base64 string
+      from your existing Drainage Dashboard or Road Information Map HTML.
+      Or use the extract_logo.py utility to pull it automatically.
+    -->
+    <img id="logo-img" src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA5NTQuNTkgODYxLjg4Ij48Y2lyY2xlIGN4PSI0NzcuMyIgY3k9IjQzMC45IiByPSI0MDAiIGZpbGw9IiM4ZDk1NmMiLz48dGV4dCB4PSI0NzcuMyIgeT0iNDgwIiBmb250LWZhbWlseT0iZ2VvcmdpYSIgZm9udC1zaXplPSIyNDAiIGZvbnQtd2VpZ2h0PSI3MDAiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiNmZmYiPkZPUjwvdGV4dD48L3N2Zz4=" alt="City of Fair Oaks Ranch">
+  </div>
+  <div id="app-title-block">
+    <div id="app-title">Capital Improvement Projects</div>
+    <div id="app-subtitle">City of Fair Oaks Ranch · Public Works</div>
+  </div>
+  <div id="header-actions">
+    <button class="header-btn" id="reset-view-btn" title="Reset map view">↻ Reset View</button>
+  </div>
+</header>
+
+<!-- ============================================================================
+     MAIN
+     ============================================================================ -->
+<main id="app-main">
+
+  <!-- Map area -->
+  <div id="map-area">
+    <arcgis-map id="cip-map" basemap="topo-vector" center="-98.629,29.748" zoom="13"></arcgis-map>
+
+    <!-- Stats panel (top-left, collapsible) -->
+    <div id="stats-panel">
+      <button id="stats-toggle" type="button" aria-label="Toggle stats panel">
+        <span class="stats-toggle-label">Project Statistics</span>
+        <svg class="stats-toggle-icon" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+          <path d="M3 5l5 5 5-5" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
+
+      <div class="stats-body">
+        <div class="stats-section">
+          <div class="stats-label">Total Projects</div>
+          <div class="stats-value" id="stat-total-projects">—</div>
+          <div class="stats-value-sub" id="stat-total-mapped">— mapped on this view</div>
+        </div>
+
+        <div class="stats-section">
+          <div class="stats-label">Total Budget</div>
+          <div class="stats-value" id="stat-budget-allocated">—</div>
+          <div class="stats-value-sub" id="stat-budget-spent">— spent</div>
+          <div class="stats-progress-bar">
+            <div class="stats-progress-fill" id="stat-budget-fill" style="width:0%"></div>
+          </div>
+        </div>
+
+        <div class="stats-section">
+          <div class="stats-label">By Category</div>
+          <div class="stats-categories" id="stat-categories"></div>
+        </div>
+
+        <div class="stats-footer" id="stat-footer">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Directory panel (right) -->
+  <aside id="directory-panel">
+    <button id="mobile-toggle" type="button" aria-label="Toggle directory">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
+        <path d="M3 5l5 5 5-5"/>
+      </svg>
+    </button>
+
+    <div class="directory-header">
+      <div class="directory-title">Project Directory</div>
+      <div class="directory-subtitle"><span id="dir-count">—</span> projects</div>
+
+      <div class="search-wrap">
+        <svg class="search-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="7" cy="7" r="5"/>
+          <path d="M11 11l3 3" stroke-linecap="round"/>
+        </svg>
+        <input type="text" id="directory-search" placeholder="Search projects…" autocomplete="off">
+      </div>
+
+      <div class="filter-row" id="category-filters">
+        <button class="filter-chip active" data-cat="all">All</button>
+        <button class="filter-chip" data-cat="Water"><span class="chip-dot" style="background:#B0C1C9"></span>Water</button>
+        <button class="filter-chip" data-cat="Wastewater"><span class="chip-dot" style="background:#192737"></span>Wastewater</button>
+        <button class="filter-chip" data-cat="Roadway"><span class="chip-dot" style="background:#8D956C"></span>Roadway</button>
+        <button class="filter-chip" data-cat="Drainage"><span class="chip-dot" style="background:#717C60"></span>Drainage</button>
+        <button class="filter-chip" data-cat="Building"><span class="chip-dot" style="background:#A64850"></span>Building</button>
+      </div>
+
+      <div class="filter-row" id="status-filters">
+        <button class="filter-chip active" data-status="all">Any Status</button>
+        <button class="filter-chip" data-status="current">Current</button>
+        <button class="filter-chip" data-status="completed">Completed</button>
+      </div>
+    </div>
+
+    <div id="directory-list">
+      <div id="directory-loading">Loading projects…</div>
+    </div>
+  </aside>
+</main>
+
+<!-- ============================================================================
+     ARCGIS JS SDK (loads after DOM)
+     ============================================================================ -->
+<script src="https://js.arcgis.com/4.34/"></script>
+
+<script>
+/* ============================================================================
+   CIP MAP - Application Logic
+   ============================================================================ */
+
+require([
+  "esri/Map",
+  "esri/views/MapView",
+  "esri/layers/FeatureLayer",
+  "esri/layers/GraphicsLayer",
+  "esri/Graphic",
+  "esri/geometry/SpatialReference",
+  "esri/identity/IdentityManager",
+  "esri/PopupTemplate"
+], function(Map, MapView, FeatureLayer, GraphicsLayer, Graphic, SpatialReference, esriId, PopupTemplate) {
+
+  // ============================================================================
+  // CONFIGURATION
+  // ============================================================================
+
+  // Public view URL (parens auto-encoded by URL constructor when fetched)
+  const PUBLIC_VIEW_URL = "https://services6.arcgis.com/Cnwpb7mZuifVHE6A/arcgis/rest/services/City_of_Fair_Oaks_Ranch_CIP_Projects_(Public_View)/FeatureServer";
+
+  const POINT_LAYER_URL = PUBLIC_VIEW_URL + "/0";
+  const LINE_LAYER_URL = PUBLIC_VIEW_URL + "/1";
+  const POLY_LAYER_URL = PUBLIC_VIEW_URL + "/2";
+
+  const JURISDICTIONAL_URL = "https://services6.arcgis.com/Cnwpb7mZuifVHE6A/arcgis/rest/services/FOR_Jurisdictional/FeatureServer/0";
+
+  const CATEGORY_COLORS = {
+    "Water":      "#B0C1C9",
+    "Wastewater": "#192737",
+    "Roadway":    "#8D956C",
+    "Drainage":   "#717C60",
+    "Building":   "#A64850"
+  };
+
+  // ============================================================================
+  // BLANKET-REJECT AUTH (public app — no login)
+  // ============================================================================
+
+  esriId.getCredential = function() {
+    return Promise.reject(new Error("Public app — auth not available"));
+  };
+
+  // ============================================================================
+  // STATE
+  // ============================================================================
+
+  const state = {
+    allProjects: [],   // {feature, geometryType, layer, ...}
+    filtered: [],
+    selected: null,
+    filters: {
+      search: "",
+      category: "all",
+      status: "all"
+    },
+    map: null,
+    view: null,
+    layers: { point: null, line: null, polygon: null }
+  };
+
+  // ============================================================================
+  // RENDERERS — Solid by category, opacity by progress
+  // ============================================================================
+
+  function buildPointRenderer() {
+    return {
+      type: "unique-value",
+      field: "Category",
+      defaultSymbol: makePointSym("#888888"),
+      uniqueValueInfos: Object.entries(CATEGORY_COLORS).map(([cat, color]) => ({
+        value: cat,
+        symbol: makePointSym(color)
+      })),
+      visualVariables: [{
+        type: "opacity",
+        field: "ProgressPercent",
+        stops: [
+          { value: 0,   opacity: 0.55 },
+          { value: 50,  opacity: 0.80 },
+          { value: 100, opacity: 1.00 }
+        ]
+      }]
+    };
+  }
+
+  function makePointSym(color) {
+    return {
+      type: "simple-marker",
+      style: "circle",
+      color: color,
+      size: 14,
+      outline: { color: "#FAF8F4", width: 2 }
+    };
+  }
+
+  function buildLineRenderer() {
+    return {
+      type: "unique-value",
+      field: "Category",
+      defaultSymbol: makeLineSym("#888888"),
+      uniqueValueInfos: Object.entries(CATEGORY_COLORS).map(([cat, color]) => ({
+        value: cat,
+        symbol: makeLineSym(color)
+      })),
+      visualVariables: [{
+        type: "opacity",
+        field: "ProgressPercent",
+        stops: [
+          { value: 0,   opacity: 0.55 },
+          { value: 50,  opacity: 0.80 },
+          { value: 100, opacity: 1.00 }
+        ]
+      }]
+    };
+  }
+
+  function makeLineSym(color) {
+    return {
+      type: "simple-line",
+      color: color,
+      width: 5,
+      cap: "round",
+      join: "round"
+    };
+  }
+
+  function buildPolygonRenderer() {
+    return {
+      type: "unique-value",
+      field: "Category",
+      defaultSymbol: makePolySym("#888888"),
+      uniqueValueInfos: Object.entries(CATEGORY_COLORS).map(([cat, color]) => ({
+        value: cat,
+        symbol: makePolySym(color)
+      })),
+      visualVariables: [{
+        type: "opacity",
+        field: "ProgressPercent",
+        stops: [
+          { value: 0,   opacity: 0.40 },
+          { value: 50,  opacity: 0.60 },
+          { value: 100, opacity: 0.80 }
+        ]
+      }]
+    };
+  }
+
+  function makePolySym(color) {
+    return {
+      type: "simple-fill",
+      color: hexToRgba(color, 0.5),
+      outline: { color: color, width: 2 }
+    };
+  }
+
+  function hexToRgba(hex, alpha) {
+    const h = hex.replace('#', '');
+    const r = parseInt(h.substring(0,2), 16);
+    const g = parseInt(h.substring(2,4), 16);
+    const b = parseInt(h.substring(4,6), 16);
+    return [r, g, b, alpha];
+  }
+
+  // Labeling — show progress percentage on each feature
+  function buildLabelInfo() {
+    return [{
+      labelExpressionInfo: { expression: "Round($feature.ProgressPercent) + '%'" },
+      symbol: {
+        type: "text",
+        color: "#1A1A1A",
+        haloColor: "#FAF8F4",
+        haloSize: 1.5,
+        font: {
+          family: "DM Sans",
+          size: 10,
+          weight: "bold"
+        }
+      },
+      labelPlacement: "above-center",
+      minScale: 30000,  // only show when reasonably zoomed in
+      maxScale: 0
+    }];
+  }
+
+  // ============================================================================
+  // POPUP TEMPLATE
+  // ============================================================================
+
+  function buildPopupTemplate() {
+    return new PopupTemplate({
+      title: "{ProjectName}",
+      outFields: ["*"],
+      content: function(feature) {
+        const a = feature.graphic.attributes;
+        const cat = a.Category || "Other";
+        const catColor = CATEGORY_COLORS[cat] || "#888";
+        const status = (a.Status || "current").toLowerCase();
+        const statusLabel = status === "completed" ? "Completed" : "Current";
+        const pct = Math.round(Number(a.ProgressPercent) || 0);
+        const allocated = Number(a.BudgetAllocated) || 0;
+        const spent = Number(a.BudgetSpent) || 0;
+        const dept = a.Department || "—";
+        const startDate = a.StartDate || "—";
+        const endDate = a.EndDate || "—";
+        const description = (a.Description || "").trim();
+
+        return `
+          <div class="cip-popup">
+            <div class="cip-popup-header">
+              <span class="cip-badge cat"><span class="dot" style="background:${catColor}"></span>${cat}</span>
+              <span class="cip-badge status-${status}">${statusLabel}</span>
+            </div>
+
+            <div class="cip-section">
+              <div class="cip-section-label">Progress</div>
+              <div class="cip-progress-row">
+                <div class="cip-progress-bar">
+                  <div class="cip-progress-fill" style="width:${pct}%; background:${catColor}"></div>
+                </div>
+                <div class="cip-progress-pct">${pct}%</div>
+              </div>
+            </div>
+
+            <div class="cip-section">
+              <div class="cip-section-label">Budget</div>
+              <div class="cip-budget-grid">
+                <div class="cip-budget-cell">
+                  <div class="cip-budget-cell-label">Allocated</div>
+                  <div class="cip-budget-cell-value">${formatCurrency(allocated)}</div>
+                </div>
+                <div class="cip-budget-cell">
+                  <div class="cip-budget-cell-label">Spent</div>
+                  <div class="cip-budget-cell-value">${formatCurrency(spent)}</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="cip-section">
+              <div class="cip-section-label">Timeline</div>
+              <div class="cip-meta-row"><span class="label">Start</span><span class="value">${startDate}</span></div>
+              <div class="cip-meta-row"><span class="label">End</span><span class="value">${endDate}</span></div>
+              <div class="cip-meta-row"><span class="label">Department</span><span class="value">${dept}</span></div>
+            </div>
+
+            ${description ? `
+            <div class="cip-section">
+              <div class="cip-section-label">Description</div>
+              <div class="cip-description">${escapeHtml(description)}</div>
+            </div>
+            ` : ''}
+          </div>
+        `;
+      }
+    });
+  }
+
+  function formatCurrency(n) {
+    if (!n || isNaN(n)) return "$0";
+    if (n >= 1_000_000) return "$" + (n / 1_000_000).toFixed(1) + "M";
+    if (n >= 1_000) return "$" + Math.round(n / 1_000) + "K";
+    return "$" + n.toLocaleString();
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  // ============================================================================
+  // DATA LOADING — Direct REST fetch (decoupled from SDK auth)
+  // ============================================================================
+
+  async function fetchAllFeatures(layerUrl, geomType) {
+    const params = new URLSearchParams({
+      where: "1=1",
+      outFields: "*",
+      returnGeometry: "true",
+      outSR: "4326",
+      f: "json"
+    });
+
+    try {
+      const response = await fetch(`${layerUrl}/query`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: params
+      });
+      const data = await response.json();
+      if (data.error) {
+        console.error(`Layer ${geomType} query error:`, data.error);
+        return [];
+      }
+      return (data.features || []).map(f => ({ ...f, _geomType: geomType }));
+    } catch (e) {
+      console.error(`Layer ${geomType} fetch failed:`, e);
+      return [];
+    }
+  }
+
+  async function loadAllProjects() {
+    const [points, lines, polygons] = await Promise.all([
+      fetchAllFeatures(POINT_LAYER_URL, "point"),
+      fetchAllFeatures(LINE_LAYER_URL, "line"),
+      fetchAllFeatures(POLY_LAYER_URL, "polygon")
+    ]);
+
+    const all = [...points, ...lines, ...polygons];
+    state.allProjects = all.map(f => ({
+      attributes: f.attributes,
+      geometry: f.geometry,
+      geomType: f._geomType
+    }));
+
+    return state.allProjects;
+  }
+
+  // ============================================================================
+  // STATS CALCULATION & RENDER
+  // ============================================================================
+
+  function renderStats() {
+    const projects = state.allProjects;
+    const totalCount = projects.length;
+    const totalAllocated = projects.reduce((s, p) => s + (Number(p.attributes.BudgetAllocated) || 0), 0);
+    const totalSpent = projects.reduce((s, p) => s + (Number(p.attributes.BudgetSpent) || 0), 0);
+    const spentPct = totalAllocated > 0 ? (totalSpent / totalAllocated) * 100 : 0;
+
+    document.getElementById('stat-total-projects').textContent = totalCount;
+    document.getElementById('stat-total-mapped').textContent = totalCount + " mapped on this view";
+    document.getElementById('stat-budget-allocated').textContent = formatCurrencyFull(totalAllocated);
+    document.getElementById('stat-budget-spent').textContent = formatCurrencyFull(totalSpent) + " spent (" + Math.round(spentPct) + "%)";
+    document.getElementById('stat-budget-fill').style.width = Math.min(100, spentPct) + "%";
+
+    // By category
+    const byCat = {};
+    projects.forEach(p => {
+      const c = p.attributes.Category || "Other";
+      byCat[c] = (byCat[c] || 0) + 1;
+    });
+
+    const catContainer = document.getElementById('stat-categories');
+    catContainer.innerHTML = "";
+    const orderedCats = ["Water", "Wastewater", "Roadway", "Drainage", "Building"];
+    orderedCats.forEach(cat => {
+      if (!byCat[cat]) return;
+      const row = document.createElement('div');
+      row.className = 'stats-cat-row';
+      row.innerHTML = `
+        <span class="stats-cat-dot" style="background:${CATEGORY_COLORS[cat]}"></span>
+        <span class="stats-cat-name">${cat}</span>
+        <span class="stats-cat-count">${byCat[cat]}</span>
+      `;
+      catContainer.appendChild(row);
+    });
+
+    // Footer — last sync timestamp
+    const lastUpdated = findMostRecentLastUpdated(projects);
+    document.getElementById('stat-footer').textContent = lastUpdated
+      ? "Last sync: " + lastUpdated
+      : "Synced from ClearGov";
+  }
+
+  function formatCurrencyFull(n) {
+    if (!n || isNaN(n)) return "$0";
+    if (n >= 1_000_000) return "$" + (n / 1_000_000).toFixed(2) + "M";
+    if (n >= 1_000) return "$" + (n / 1_000).toFixed(1) + "K";
+    return "$" + n.toLocaleString();
+  }
+
+  function findMostRecentLastUpdated(projects) {
+    const dates = projects
+      .map(p => p.attributes.LastUpdated)
+      .filter(Boolean);
+    if (dates.length === 0) return null;
+    // LastUpdated format: MM/DD/YYYY HH:MM:SS — already a string, take first
+    return dates[0];
+  }
+
+  // ============================================================================
+  // DIRECTORY (right panel) — Sort by Project Name (alphabetical)
+  // ============================================================================
+
+  function renderDirectory() {
+    applyFilters();
+    const list = document.getElementById('directory-list');
+    list.innerHTML = "";
+
+    document.getElementById('dir-count').textContent = state.filtered.length;
+
+    if (state.filtered.length === 0) {
+      list.innerHTML = '<div id="directory-empty">No projects match your filters.</div>';
+      return;
+    }
+
+    state.filtered.forEach((p, idx) => {
+      const a = p.attributes;
+      const cat = a.Category || "Other";
+      const catColor = CATEGORY_COLORS[cat] || "#888";
+      const status = (a.Status || "current").toLowerCase();
+      const statusLabel = status === "completed" ? "Completed" : "Current";
+      const pct = Math.round(Number(a.ProgressPercent) || 0);
+      const allocated = Number(a.BudgetAllocated) || 0;
+      const spent = Number(a.BudgetSpent) || 0;
+
+      const item = document.createElement('div');
+      item.className = 'directory-item';
+      item.dataset.idx = idx;
+      item.innerHTML = `
+        <div class="di-name">${escapeHtml(a.ProjectName || 'Unnamed')}</div>
+        <div class="di-meta">
+          <span class="di-cat-badge"><span class="cat-dot" style="background:${catColor}"></span>${cat}</span>
+          <span class="di-status-pill ${status}">${statusLabel}</span>
+        </div>
+        <div class="di-progress">
+          <div class="di-progress-bar">
+            <div class="di-progress-fill" style="width:${pct}%; background:${catColor}"></div>
+          </div>
+          <div class="di-progress-pct">${pct}%</div>
+        </div>
+        <div class="di-budget">${formatCurrency(allocated)} allocated · ${formatCurrency(spent)} spent</div>
+      `;
+
+      item.addEventListener('click', () => zoomToProject(p, item));
+      list.appendChild(item);
+    });
+  }
+
+  function applyFilters() {
+    const f = state.filters;
+    const search = f.search.toLowerCase().trim();
+
+    state.filtered = state.allProjects
+      .filter(p => {
+        const a = p.attributes;
+        if (f.category !== "all" && a.Category !== f.category) return false;
+        if (f.status !== "all" && (a.Status || "").toLowerCase() !== f.status) return false;
+        if (search) {
+          const haystack = [
+            a.ProjectName || "",
+            a.Description || "",
+            a.Department || "",
+            a.Category || ""
+          ].join(" ").toLowerCase();
+          if (!haystack.includes(search)) return false;
+        }
+        return true;
+      })
+      .sort((p1, p2) => {
+        // Default sort: Project Name (alphabetical)
+        return (p1.attributes.ProjectName || "").localeCompare(p2.attributes.ProjectName || "");
+      });
+  }
+
+  function zoomToProject(p, itemEl) {
+    document.querySelectorAll('.directory-item.selected').forEach(el => el.classList.remove('selected'));
+    itemEl.classList.add('selected');
+    state.selected = p;
+
+    if (!p.geometry || !state.view) return;
+
+    // Determine geometry constructor & target zoom
+    const view = state.view;
+    let geom;
+
+    if (p.geomType === "point") {
+      geom = {
+        type: "point",
+        longitude: p.geometry.x,
+        latitude: p.geometry.y,
+        spatialReference: { wkid: 4326 }
+      };
+      view.goTo({ target: geom, zoom: 17 }, { duration: 800 });
+    } else if (p.geomType === "line") {
+      geom = {
+        type: "polyline",
+        paths: [p.geometry.paths ? p.geometry.paths[0] : []],
+        spatialReference: { wkid: 4326 }
+      };
+      view.goTo({ target: geom }, { duration: 800 }).then(() => {
+        view.zoom = Math.max(view.zoom - 1, 14);
+      });
+    } else if (p.geomType === "polygon") {
+      geom = {
+        type: "polygon",
+        rings: p.geometry.rings,
+        spatialReference: { wkid: 4326 }
+      };
+      view.goTo({ target: geom }, { duration: 800 });
+    }
+
+    // Open popup at feature
+    const layer = state.layers[p.geomType];
+    if (layer) {
+      layer.queryFeatures({
+        where: `ProjectID = ${p.attributes.ProjectID}`,
+        outFields: ["*"],
+        returnGeometry: true
+      }).then(result => {
+        if (result.features.length > 0) {
+          view.openPopup({
+            features: result.features,
+            location: result.features[0].geometry.type === "point"
+              ? result.features[0].geometry
+              : result.features[0].geometry.extent.center
+          });
+        }
+      }).catch(err => console.warn("Popup open failed:", err));
+    }
+  }
+
+  // ============================================================================
+  // CENTERING via FOR_Jurisdictional
+  // ============================================================================
+
+  async function centerOnJurisdiction() {
+    const params = new URLSearchParams({
+      where: "1=1",
+      returnExtentOnly: "true",
+      outSR: "102100",
+      f: "json"
+    });
+
+    try {
+      const response = await fetch(`${JURISDICTIONAL_URL}/query`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: params
+      });
+      const data = await response.json();
+      if (data.extent) {
+        const isMobile = window.innerWidth <= 768;
+        await state.view.goTo({
+          target: data.extent,
+          // padding skipped on mobile (table is below, not beside)
+        }, { duration: 600 });
+        if (!isMobile) {
+          state.view.padding = { right: 380 };
+          await state.view.goTo({ target: data.extent }, { duration: 0 });
+        }
+      }
+    } catch (e) {
+      console.warn("Jurisdictional centering failed, using default:", e);
+    }
+  }
+
+  // ============================================================================
+  // FILTERS / SEARCH UI
+  // ============================================================================
+
+  function setupUI() {
+    // Category filters
+    document.querySelectorAll('#category-filters .filter-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        document.querySelectorAll('#category-filters .filter-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        state.filters.category = chip.dataset.cat;
+        renderDirectory();
+        applyMapFilters();
+      });
+    });
+
+    // Status filters
+    document.querySelectorAll('#status-filters .filter-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        document.querySelectorAll('#status-filters .filter-chip').forEach(c => c.classList.remove('active'));
+        chip.classList.add('active');
+        state.filters.status = chip.dataset.status;
+        renderDirectory();
+        applyMapFilters();
+      });
+    });
+
+    // Search
+    let searchDebounce;
+    document.getElementById('directory-search').addEventListener('input', (e) => {
+      clearTimeout(searchDebounce);
+      searchDebounce = setTimeout(() => {
+        state.filters.search = e.target.value;
+        renderDirectory();
+      }, 150);
+    });
+
+    // Stats panel toggle
+    document.getElementById('stats-toggle').addEventListener('click', () => {
+      document.getElementById('stats-panel').classList.toggle('collapsed');
+    });
+
+    // Mobile directory toggle
+    const mobileToggle = document.getElementById('mobile-toggle');
+    if (mobileToggle) {
+      mobileToggle.addEventListener('click', () => {
+        document.getElementById('directory-panel').classList.toggle('collapsed');
+      });
+    }
+
+    // Reset view
+    document.getElementById('reset-view-btn').addEventListener('click', centerOnJurisdiction);
+  }
+
+  function applyMapFilters() {
+    const f = state.filters;
+    const clauses = [];
+    if (f.category !== "all") clauses.push(`Category = '${f.category.replace(/'/g, "''")}'`);
+    if (f.status !== "all") clauses.push(`LOWER(Status) = '${f.status.replace(/'/g, "''")}'`);
+    const where = clauses.length ? clauses.join(" AND ") : "1=1";
+
+    Object.values(state.layers).forEach(l => {
+      if (l) l.definitionExpression = where;
+    });
+  }
+
+  // ============================================================================
+  // INITIALIZATION
+  // ============================================================================
+
+  async function init() {
+    // Wait for the <arcgis-map> web component to be ready, then attach handlers
+    const mapEl = document.getElementById('cip-map');
+
+    // Build layers
+    const popupTemplate = buildPopupTemplate();
+    const labelInfo = buildLabelInfo();
+
+    state.layers.point = new FeatureLayer({
+      url: POINT_LAYER_URL,
+      renderer: buildPointRenderer(),
+      labelingInfo: labelInfo,
+      popupTemplate: popupTemplate,
+      title: "CIP Projects — Points",
+      outFields: ["*"]
+    });
+
+    state.layers.line = new FeatureLayer({
+      url: LINE_LAYER_URL,
+      renderer: buildLineRenderer(),
+      labelingInfo: labelInfo,
+      popupTemplate: popupTemplate,
+      title: "CIP Projects — Lines",
+      outFields: ["*"]
+    });
+
+    state.layers.polygon = new FeatureLayer({
+      url: POLY_LAYER_URL,
+      renderer: buildPolygonRenderer(),
+      labelingInfo: labelInfo,
+      popupTemplate: popupTemplate,
+      title: "CIP Projects — Polygons",
+      outFields: ["*"]
+    });
+
+    // Wait for map element to expose its view
+    await waitForMapReady(mapEl);
+
+    state.view = mapEl.view;
+    state.map = mapEl.map;
+
+    // Add layers (polygon → line → point bottom-up so points draw on top)
+    state.map.addMany([state.layers.polygon, state.layers.line, state.layers.point]);
+
+    // Setup UI handlers
+    setupUI();
+
+    // Center on jurisdictional boundary
+    await centerOnJurisdiction();
+
+    // Load project data via direct REST (for directory + stats)
+    await loadAllProjects();
+    renderStats();
+    renderDirectory();
+
+    // Hide loading overlay
+    document.getElementById('app-loading').classList.add('hidden');
+    setTimeout(() => {
+      const el = document.getElementById('app-loading');
+      if (el) el.style.display = 'none';
+    }, 500);
+  }
+
+  function waitForMapReady(mapEl) {
+    return new Promise((resolve) => {
+      if (mapEl.view && mapEl.map) { resolve(); return; }
+      mapEl.addEventListener('arcgisViewReadyChange', (e) => {
+        if (e.target.view && e.target.map) resolve();
+      }, { once: true });
+      // Fallback: check periodically
+      const interval = setInterval(() => {
+        if (mapEl.view && mapEl.map) {
+          clearInterval(interval);
+          resolve();
+        }
+      }, 100);
+      setTimeout(() => { clearInterval(interval); resolve(); }, 8000);
+    });
+  }
+
+  // Kick off
+  init().catch(err => {
+    console.error("Init failed:", err);
+    document.getElementById('app-loading').innerHTML =
+      '<div style="text-align:center;color:#A64850;font-family:DM Sans;">' +
+      '<div style="font-size:18px;margin-bottom:8px;">⚠ Map failed to load</div>' +
+      '<div style="font-size:13px;color:#666;">' + escapeHtml(err.message || String(err)) + '</div>' +
+      '</div>';
+  });
+
+});
+</script>
+
+</body>
+</html>
