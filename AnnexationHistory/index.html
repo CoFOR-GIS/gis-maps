@@ -795,7 +795,7 @@
     <div class="stats-row">
       <div class="stat-card">
         <div class="stat-value" id="stat-total">—</div>
-        <div class="stat-label">Annexations</div>
+        <div class="stat-label">Ordinances</div>
       </div>
       <div class="stat-card">
         <div class="stat-value" id="stat-earliest">—</div>
@@ -822,7 +822,7 @@
 
   <div id="panel-footer">
     City of Fair Oaks Ranch GIS &middot; <a href="https://www.fairoaksranchtx.org" target="_blank">fairoaksranchtx.org</a><br>
-    <span style="font-size:9px;opacity:0.6">Acreage marked with * is calculated from mapped geometry</span>
+    <span style="font-size:9px;opacity:0.6">Acreage calculated from mapped geometry</span>
   </div>
 </div>
 
@@ -914,14 +914,13 @@ require([
   }
 
   /**
-   * Acreage priority: RecordedAcreage (if populated) → Shape__Area / 43560 → null
+   * Acreage — always use Shape__Area (geometry-calculated) because
+   * RecordedAcreage is the ordinance-level total that is duplicated
+   * across split features and would double-count.
    */
   function getAcreage(attrs) {
-    if (attrs.RecordedAcreage != null && attrs.RecordedAcreage > 0) {
-      return { value: attrs.RecordedAcreage, calculated: false };
-    }
     if (attrs.Shape__Area != null && attrs.Shape__Area > 0) {
-      return { value: attrs.Shape__Area / SQ_FT_PER_ACRE, calculated: true };
+      return { value: attrs.Shape__Area / SQ_FT_PER_ACRE };
     }
     return null;
   }
@@ -965,9 +964,6 @@ require([
       var acreDisplay = "—";
       if (acreInfo) {
         acreDisplay = acreInfo.value.toLocaleString(undefined, { maximumFractionDigits: 2 }) + " ac";
-        if (acreInfo.calculated) {
-          acreDisplay += ' <span class="popup-calc-note">(from geometry)</span>';
-        }
       }
 
       var civicId = (a.CivicPlusID || "").trim();
@@ -1076,7 +1072,7 @@ require([
         outline: { color: [100, 100, 100, 0.4], width: 0.5 }
       }
     },
-    outFields: ["SiteAddress", "OBJECTID"],
+    outFields: ["ADDRESS", "OBJECTID"],
     labelingInfo: [],
     popupEnabled: false,
     listMode: "hide"
@@ -1146,7 +1142,7 @@ require([
       where: "1=1",
       outFields: ["*"],
       returnGeometry: true,
-      orderByFields: ["AnnexDate DESC"]
+      orderByFields: ["AnnexDate ASC"]
     }).then(function(results) {
       allFeatures = results.features;
 
@@ -1181,6 +1177,7 @@ require([
   function updateStats(features) {
     var totalAcres = 0;
     var earliest = 9999, latest = 0;
+    var uniqueOrdinances = {};
 
     features.forEach(function(f) {
       var acreInfo = getAcreage(f.attributes);
@@ -1190,9 +1187,15 @@ require([
         if (yr < earliest) earliest = yr;
         if (yr > latest) latest = yr;
       }
+      // Collect unique ordinance numbers, excluding "0"
+      var ord = (f.attributes.OrdinanceNum || f.attributes.Ordinance || "").trim();
+      if (ord && ord !== "0") {
+        uniqueOrdinances[ord] = true;
+      }
     });
 
-    document.getElementById("stat-total").textContent = features.length;
+    var ordCount = Object.keys(uniqueOrdinances).length;
+    document.getElementById("stat-total").textContent = ordCount;
     document.getElementById("stat-earliest").textContent = earliest < 9999 ? earliest : "—";
     document.getElementById("stat-latest").textContent = latest > 0 ? latest : "—";
     document.getElementById("stat-acres").textContent = totalAcres > 0 ?
@@ -1297,24 +1300,52 @@ require([
       return;
     }
 
+    // ── Deduplicate: group features that share the same non-empty CivicPlusID ──
+    // Features with no CivicPlusID are shown individually.
+    var grouped = [];
+    var civicMap = {};  // CivicPlusID → index in grouped[]
+
     features.forEach(function(f) {
+      var cid = (f.attributes.CivicPlusID || "").trim();
+      if (cid && civicMap.hasOwnProperty(cid)) {
+        // Merge into existing group — accumulate geometry and acreage
+        grouped[civicMap[cid]].members.push(f);
+      } else {
+        var idx = grouped.length;
+        grouped.push({ lead: f, members: [f] });
+        if (cid) civicMap[cid] = idx;
+      }
+    });
+
+    grouped.forEach(function(group) {
+      var f = group.lead;
       var a = f.attributes;
       var dateStr = a.AnnexDate ? new Date(a.AnnexDate).getFullYear() : "N/A";
       var title = getDisplayTitle(a);
       var ord = a.OrdinanceNum || a.Ordinance || "—";
       var era = getEra(a.AnnexDate);
       var color = ERA_COLORS[era] || ERA_COLORS["Unknown"];
-      var acreInfo = getAcreage(a);
+
+      // Sum acreage across all grouped features (geometry-based)
+      var totalAcres = 0;
+      group.members.forEach(function(m) {
+        var ai = getAcreage(m.attributes);
+        if (ai) totalAcres += ai.value;
+      });
       var acreStr = "";
-      if (acreInfo) {
-        acreStr = acreInfo.value.toFixed(1) + " ac";
-        if (acreInfo.calculated) acreStr += "*";
+      if (totalAcres > 0) {
+        acreStr = totalAcres.toFixed(1) + " ac";
       }
+
+      // Badge for grouped entries
+      var countBadge = group.members.length > 1
+        ? ' <span style="font-size:10px;color:var(--text-muted);font-weight:400">(' + group.members.length + ' parcels)</span>'
+        : '';
 
       var div = document.createElement("div");
       div.className = "annex-item";
       div.style.borderLeft = "4px solid " + color.hex;
-      div.innerHTML = '<div class="annex-name">' + escHtml(title) + '</div>' +
+      div.innerHTML = '<div class="annex-name">' + escHtml(title) + countBadge + '</div>' +
         '<div class="annex-meta">' +
         '<span>📅 ' + dateStr + '</span>' +
         '<span>📋 ' + escHtml(ord) + '</span>' +
@@ -1326,9 +1357,20 @@ require([
           el.classList.remove("active");
         });
         div.classList.add("active");
-        if (f.geometry) {
-          view.goTo({ target: f.geometry, zoom: 16 }, { duration: 600 });
-          view.openPopup({ features: [f], location: f.geometry.centroid });
+
+        // Build a union extent of all member geometries, then zoom to fit
+        var extent = null;
+        group.members.forEach(function(m) {
+          if (m.geometry) {
+            var ex = m.geometry.extent;
+            extent = extent ? extent.union(ex) : ex.clone();
+          }
+        });
+
+        if (extent) {
+          view.goTo(extent.expand(1.5), { duration: 600 }).then(function() {
+            view.openPopup({ features: [f], location: f.geometry.centroid });
+          });
         }
       });
 
@@ -1386,11 +1428,11 @@ require([
   function searchAddress(query) {
     var escaped = query.replace(/'/g, "''").toUpperCase();
     parcelLayer.queryFeatures({
-      where: "UPPER(SiteAddress) LIKE '%" + escaped + "%'",
-      outFields: ["SiteAddress", "OBJECTID"],
+      where: "UPPER(ADDRESS) LIKE '%" + escaped + "%'",
+      outFields: ["ADDRESS", "OBJECTID"],
       returnGeometry: true,
       num: 10,
-      orderByFields: ["SiteAddress ASC"]
+      orderByFields: ["ADDRESS ASC"]
     }).then(function(results) {
       var container = document.getElementById("address-results");
       container.innerHTML = "";
@@ -1402,7 +1444,7 @@ require([
       }
 
       results.features.forEach(function(parcel) {
-        var addr = parcel.attributes.SiteAddress || "Unknown";
+        var addr = parcel.attributes.ADDRESS || "Unknown";
         var item = document.createElement("div");
         item.className = "address-result-item";
         item.textContent = addr;
