@@ -437,17 +437,49 @@ require([
 
   async function refresh(){
     try{
-      const q = incidents.createQuery();
-      q.where = APP_CONFIG.activeWhere;
-      q.outFields = ["*"];
-      q.orderByFields = ["Severity DESC","StartDate DESC"];
-      q.returnGeometry = true;
-      const {features} = await incidents.queryFeatures(q);
+      // Query ALL THREE layers — a closure line or affected-area polygon
+      // with no incident point still drives the banner and the list.
+      const queryActive = async (layer, kind) => {
+        const q = layer.createQuery();
+        q.where = APP_CONFIG.activeWhere;
+        q.outFields = ["*"];
+        q.returnGeometry = true;
+        const {features} = await layer.queryFeatures(q);
+        features.forEach(f => f._kind = kind);
+        return features;
+      };
+      const [pts, lns, pgs] = await Promise.all([
+        queryActive(incidents, "point"),
+        queryActive(closures,  "line"),
+        queryActive(areas,     "polygon"),
+      ]);
+      const all = [...pts, ...lns, ...pgs];
 
-      const maxSev = features.length
-        ? Math.max(...features.map(f => f.attributes.Severity || 1)) : 0;
-      setBanner(Math.min(maxSev,4), features.length);
-      renderList(features);
+      // Banner = max severity across EVERY active feature, any geometry
+      const maxSev = all.length
+        ? Math.max(...all.map(f => f.attributes.Severity || 1)) : 0;
+
+      // One card per event: dedupe by IncidentName so a point + its
+      // polygon + its closure line don't triple-list. Points win the
+      // card (richest fields), then polygons, then lines.
+      const rank = {point:3, polygon:2, line:1};
+      const byName = new Map();
+      for(const f of all){
+        const nm = (f.attributes.IncidentName || "").trim().toLowerCase();
+        const key = nm || `__${f._kind}_${f.attributes.OBJECTID}`;
+        const cur = byName.get(key);
+        if(!cur ||
+           rank[f._kind] > rank[cur._kind] ||
+           (rank[f._kind] === rank[cur._kind] &&
+            (f.attributes.Severity||0) > (cur.attributes.Severity||0)))
+          byName.set(key, f);
+      }
+      const merged = [...byName.values()].sort((a,b) =>
+        (b.attributes.Severity||0) - (a.attributes.Severity||0) ||
+        (b.attributes.StartDate||0) - (a.attributes.StartDate||0));
+
+      setBanner(Math.min(maxSev,4), merged.length);
+      renderList(merged);
       updatedEl.textContent = "Last updated " +
         new Date().toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
 
@@ -455,8 +487,9 @@ require([
       [incidents, areas, closures, leaks].forEach(l => l.refresh());
     }catch(err){
       updatedEl.textContent =
-        "Live incident feed unavailable — publish CoFOREM_Emergency_Operations, " +
-        "or check the layer URL in APP_CONFIG.";
+        "Live incident feed unavailable — check that " +
+        "CoFOREM_Emergency_Operations_public is shared with Everyone " +
+        "and loads at its REST URL, or verify APP_CONFIG.";
       setBanner(0, 0);
       renderList([]);
       console.error(err);
@@ -476,6 +509,12 @@ require([
     for(const f of features){
       const a = f.attributes;
       const sev = SEV[Math.min(a.Severity || 1, 4)];
+      const title = a.IncidentName ||
+        (f._kind === "line"
+          ? "Road Closure" + (a.RoadName ? " — " + a.RoadName : "")
+          : f._kind === "polygon" ? "Affected Area" : "Incident");
+      const action = a.Instructions ||
+        (f._kind === "line" && a.DetourDesc ? "Detour: " + a.DetourDesc : "");
       const card = document.createElement("div");
       card.className = "card";
       card.tabIndex = 0;
@@ -483,15 +522,21 @@ require([
       card.style.borderLeftColor = sev.color;
       card.innerHTML = `
         <span class="chip" style="background:${sev.color}">${sev.label}</span>
-        <h4>${esc(a.IncidentName) || "Incident"}</h4>
+        <h4>${esc(title)}</h4>
         <div class="meta">${esc(a.LocationDesc) || ""}
           ${a.StartDate ? " · Effective " + fmtDate(a.StartDate) : ""}
           ${a.Status ? " · " + esc(STATUS_LABEL[a.Status] || a.Status) : ""}
           ${a.UpdatedDate ? " · Updated " + fmtDate(a.UpdatedDate) : ""}</div>
-        ${a.Instructions ? `<div class="act"><b>What to do</b>${esc(a.Instructions)}</div>` : ""}`;
+        ${action ? `<div class="act"><b>What to do</b>${esc(action)}</div>` : ""}`;
       const go = () => {
-        view.goTo({target:f.geometry, zoom:15});
-        view.openPopup({features:[f], location:f.geometry});
+        const g = f.geometry;
+        if(g.type === "point"){
+          view.goTo({target:g, zoom:15});
+          view.openPopup({features:[f], location:g});
+        }else{
+          view.goTo(g.extent.expand(1.6));
+          view.openPopup({features:[f], location:g.extent.center});
+        }
       };
       card.addEventListener("click", go);
       card.addEventListener("keydown", e => {
