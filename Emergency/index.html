@@ -276,8 +276,8 @@ const SEV = {
 require([
   "esri/Map","esri/views/MapView","esri/layers/FeatureLayer",
   "esri/widgets/Locate","esri/widgets/ScaleBar","esri/widgets/Home",
-  "esri/core/reactiveUtils"
-], (Map, MapView, FeatureLayer, Locate, ScaleBar, Home) => {
+  "esri/widgets/BasemapToggle","esri/core/reactiveUtils"
+], (Map, MapView, FeatureLayer, Locate, ScaleBar, Home, BasemapToggle) => {
 
   /* ---------- renderers keyed to the severity scale ---------- */
   const sevInfos = (symFn) => [1,2,3,4].map(v => ({
@@ -394,6 +394,7 @@ require([
   });
   view.ui.add(new Home({view}), "top-left");
   view.ui.add(new Locate({view}), "top-left");
+  view.ui.add(new BasemapToggle({view, nextBasemap:"hybrid"}), "bottom-left");
   view.ui.add(new ScaleBar({view, unit:"dual"}), "bottom-right");
 
   /* ---------- reference layer toggles ---------- */
@@ -439,6 +440,8 @@ require([
     try{
       // Query ALL THREE layers — a closure line or affected-area polygon
       // with no incident point still drives the banner and the list.
+      // Each layer is independent: if one query fails, the others still
+      // drive the banner, and the failing layer is named in the panel.
       const queryActive = async (layer, kind) => {
         const q = layer.createQuery();
         q.where = APP_CONFIG.activeWhere;
@@ -448,12 +451,22 @@ require([
         features.forEach(f => f._kind = kind);
         return features;
       };
-      const [pts, lns, pgs] = await Promise.all([
-        queryActive(incidents, "point"),
-        queryActive(closures,  "line"),
-        queryActive(areas,     "polygon"),
-      ]);
-      const all = [...pts, ...lns, ...pgs];
+      const jobs = [
+        {layer:incidents, kind:"point",   name:"Incidents"},
+        {layer:closures,  kind:"line",    name:"Road Closures"},
+        {layer:areas,     kind:"polygon", name:"Affected Areas"},
+      ];
+      const settled = await Promise.allSettled(
+        jobs.map(j => queryActive(j.layer, j.kind)));
+
+      const all = [];
+      const failed = [];
+      settled.forEach((r, i) => {
+        if(r.status === "fulfilled") all.push(...r.value);
+        else { failed.push(jobs[i].name); console.error(jobs[i].name, r.reason); }
+      });
+      if(failed.length === jobs.length)
+        throw new Error("All layer queries failed");
 
       // Banner = max severity across EVERY active feature, any geometry
       const maxSev = all.length
@@ -480,7 +493,10 @@ require([
 
       setBanner(Math.min(maxSev,4), merged.length);
       renderList(merged);
-      updatedEl.textContent = "Last updated " +
+      updatedEl.textContent = (failed.length
+        ? "Some layers unavailable (" + failed.join(", ") +
+          " — check view definition/sharing on that layer). Updated "
+        : "Last updated ") +
         new Date().toLocaleTimeString([], {hour:"numeric", minute:"2-digit"});
 
       // also refresh the map layers so geometry edits appear
