@@ -277,7 +277,7 @@ require([
   "esri/Map","esri/views/MapView","esri/layers/FeatureLayer",
   "esri/widgets/Locate","esri/widgets/ScaleBar","esri/widgets/Home",
   "esri/widgets/BasemapToggle","esri/core/reactiveUtils"
-], (Map, MapView, FeatureLayer, Locate, ScaleBar, Home, BasemapToggle) => {
+], (EsriMap, MapView, FeatureLayer, Locate, ScaleBar, Home, BasemapToggle) => {
 
   /* ---------- renderers keyed to the severity scale ---------- */
   const sevInfos = (symFn) => [1,2,3,4].map(v => ({
@@ -382,7 +382,7 @@ require([
   const facilities = new FeatureLayer({
     url:APP_CONFIG.facilitiesUrl, title:"City Facilities", visible:false});
 
-  const map = new Map({
+  const map = new EsriMap({
     basemap:"streets-navigation-vector",
     layers:[flood, boundary, areas, closures, leaks, facilities, incidents]
   });
@@ -397,9 +397,22 @@ require([
   view.ui.add(new BasemapToggle({view, nextBasemap:"hybrid"}), "bottom-left");
   view.ui.add(new ScaleBar({view, unit:"dual"}), "bottom-right");
 
-  /* ---------- reference layer toggles ---------- */
-  const bind = (id, layer) => document.getElementById(id)
-    .addEventListener("change", e => layer.visible = e.target.checked);
+  /* ---------- reference layer toggles ----------
+     Proactive hardening: if a layer fails to load (renamed service,
+     changed sharing, wrong sublayer index), its toggle grays out and is
+     labeled unavailable instead of failing silently in the console. */
+  const bind = (id, layer) => {
+    const cb = document.getElementById(id);
+    cb.addEventListener("change", e => layer.visible = e.target.checked);
+    layer.load().catch(() => {
+      cb.checked = false;
+      cb.disabled = true;
+      cb.parentElement.style.opacity = ".45";
+      cb.parentElement.append(" (unavailable)");
+      console.warn("Layer failed to load — verify URL in APP_CONFIG:",
+                   layer.title);
+    });
+  };
   bind("tglClosures", closures);
   bind("tglAreas", areas);
   bind("tglLeaks", leaks);
