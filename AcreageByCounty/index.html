@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Parcel Acreage by County | City of Fair Oaks Ranch</title>
+
+<link rel="icon" href="logo.svg" type="image/svg+xml" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+<link rel="stylesheet" href="https://js.arcgis.com/4.31/esri/themes/light/main.css" />
+<script src="https://js.arcgis.com/4.31/"></script>
+
+<style>
+  :root {
+    --cream:#FAF6EE; --surface:#FFFFFF; --navy:#192737; --sage:#8D956C; --amber:#D49A4E;
+    --ink:#1F2A36; --muted:#6B6F66; --line:#E4DECF; --grey:#B7B2A6;
+
+    /* Brand the ArcGIS popup + widgets (Calcite tokens; .esri-popup__* selectors broke after 4.28) */
+    --calcite-color-foreground-1:#FAF6EE;
+    --calcite-color-foreground-2:#F3EEE2;
+    --calcite-color-foreground-3:#ECE5D5;
+    --calcite-color-text-1:#1F2A36;
+    --calcite-color-text-2:#6B6F66;
+    --calcite-color-text-3:#6B6F66;
+    --calcite-color-border-1:#E4DECF;
+    --calcite-color-border-2:#E4DECF;
+    --calcite-color-border-3:#E4DECF;
+    --calcite-color-brand:#8D956C;
+    --calcite-color-brand-hover:#7C8459;
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:var(--cream); color:var(--ink);
+    font-family:"DM Sans",system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+  .app { display:flex; flex-direction:column; min-height:100vh; }
+
+  .masthead { display:flex; align-items:center; gap:16px; padding:18px 28px; background:var(--surface); border-bottom:2px solid var(--sage); }
+  .mark { height:42px; width:auto; flex:none; display:block; }
+  .masthead .titles { display:flex; flex-direction:column; gap:2px; min-width:0; }
+  .eyebrow { font-size:11px; letter-spacing:.16em; text-transform:uppercase; color:var(--sage); font-weight:700; }
+  .masthead h1 { margin:0; font-family:"Playfair Display",Georgia,serif; font-weight:700; font-size:clamp(20px,2.6vw,30px); color:var(--navy); line-height:1.05; }
+  .masthead .org { margin-left:auto; text-align:right; font-size:12px; color:var(--muted); line-height:1.4; }
+  .masthead .org b { color:var(--navy); font-weight:600; }
+
+  .kpis { display:grid; grid-template-columns:repeat(3,1fr); gap:1px; background:var(--line); border-bottom:1px solid var(--line); }
+  .kpi { background:var(--cream); padding:18px 28px; }
+  .kpi .label { font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); font-weight:700; margin-bottom:6px; }
+  .kpi .label .scope { color:var(--sage); }
+  .kpi .value { font-family:"Playfair Display",Georgia,serif; font-weight:700; font-size:clamp(26px,3.4vw,40px); color:var(--navy); line-height:1; }
+  .kpi .value .unit { font-size:.45em; font-family:"DM Sans",sans-serif; color:var(--muted); font-weight:600; margin-left:6px; }
+
+  .body { display:grid; grid-template-columns:1fr 396px; flex:1; min-height:480px; }
+  #mapView { position:relative; }
+  #mapView .esri-view { height:100%; }
+
+  .rail { background:var(--surface); border-left:1px solid var(--line); padding:22px 24px; overflow-y:auto; }
+  .rail h2 { margin:0 0 4px; font-family:"Playfair Display",serif; font-weight:600; font-size:19px; color:var(--navy); }
+  .rail .sub { margin:0 0 14px; font-size:12.5px; color:var(--muted); line-height:1.5; }
+
+  .segmented { display:inline-flex; background:var(--cream); border:1px solid var(--line); border-radius:9px; padding:3px; gap:3px; margin-bottom:8px; }
+  .segmented button { border:none; background:none; font:inherit; font-size:12.5px; font-weight:600; color:var(--muted); padding:6px 12px; border-radius:6px; cursor:pointer; }
+  .segmented button.active { background:var(--navy); color:#fff; }
+  .segmented button[disabled] { opacity:.38; cursor:default; }
+  .scopeNote { font-size:11.5px; color:var(--muted); margin:0 0 12px; }
+  .scopeNote b { color:var(--navy); font-weight:600; }
+  .splitLegend { display:flex; gap:16px; font-size:11px; color:var(--muted); margin:0 0 14px; }
+  .splitLegend i { display:inline-block; width:15px; height:10px; border-radius:2px; margin-right:6px; vertical-align:middle; }
+
+  .county { padding:16px 0; border-top:1px solid var(--line); }
+  .county:first-of-type { border-top:none; }
+  .county .row1 { display:flex; align-items:baseline; gap:10px; }
+  .swatch { width:12px; height:12px; border-radius:3px; flex:none; transform:translateY(1px); }
+  .county .name { font-weight:700; font-size:15px; color:var(--navy); letter-spacing:.01em; }
+  .county .share { margin-left:auto; font-size:12px; color:var(--muted); font-weight:600; }
+  .county .acres { font-family:"Playfair Display",serif; font-weight:700; font-size:28px; color:var(--ink); line-height:1.1; margin:6px 0 2px; }
+  .county .acres .unit { font-family:"DM Sans",sans-serif; font-size:13px; color:var(--muted); font-weight:600; margin-left:5px; }
+  .county .meta { font-size:12.5px; color:var(--muted); }
+  .county .meta b { color:var(--ink); font-weight:600; }
+  .county .split { font-size:12px; color:var(--muted); margin-top:3px; }
+  .band { height:9px; border-radius:6px; background:var(--line); margin-top:11px; }
+  .band .fill { display:flex; height:100%; width:0; border-radius:6px; overflow:hidden; transition:width 900ms cubic-bezier(.22,.61,.36,1); }
+  .band .seg { height:100%; }
+  @media (prefers-reduced-motion: reduce){ .band .fill { transition:none; } }
+
+  .method { margin-top:22px; padding-top:16px; border-top:1px dashed var(--line); font-size:11.5px; color:var(--muted); line-height:1.55; }
+  .method code { background:var(--cream); padding:1px 5px; border-radius:4px; font-size:11px; color:var(--navy); }
+
+  .state { position:absolute; inset:0; z-index:5; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; background:var(--cream); color:var(--muted); font-size:13.5px; text-align:center; padding:28px; }
+  .spin { width:26px; height:26px; border-radius:50%; border:3px solid var(--line); border-top-color:var(--sage); animation:sp .8s linear infinite; }
+  @keyframes sp { to { transform:rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce){ .spin { animation:none; } }
+  .hidden { display:none !important; }
+  .state b { color:var(--navy); font-size:15px; }
+  .state ul { text-align:left; max-width:460px; margin:4px 0 0; padding-left:18px; line-height:1.6; }
+  .state a { color:var(--navy); font-weight:600; word-break:break-all; }
+
+  .banner { position:absolute; top:12px; left:50%; transform:translateX(-50%); z-index:6; background:var(--navy); color:#fff; font-size:12.5px; padding:9px 14px; border-radius:8px; box-shadow:0 4px 16px rgba(25,39,55,.25); max-width:80%; }
+  .rail.loading .county-list { opacity:.4; }
+  a:focus-visible, button:focus-visible { outline:2px solid var(--sage); outline-offset:2px; }
+
+  footer { padding:12px 28px; background:var(--surface); border-top:1px solid var(--line); font-size:11px; color:var(--muted); display:flex; flex-wrap:wrap; gap:6px 18px; }
+  footer .dot { color:var(--sage); }
+
+  /* Branded popup card (page CSS reaches popup content; classes only, no inline styles) */
+  .popcard { display:flex; font-family:"DM Sans",sans-serif; min-width:210px; }
+  .popcard.is-bexar  { --accent:#192737; }
+  .popcard.is-kendall{ --accent:#8D956C; }
+  .popcard.is-comal  { --accent:#D49A4E; }
+  .popcard.is-other  { --accent:#B7B2A6; }
+  .popcard-bar { width:5px; border-radius:3px; background:var(--accent); margin-right:13px; flex:none; }
+  .popcard-eyebrow { font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--sage); font-weight:700; margin-bottom:4px; }
+  .popcard-acres { font-family:"Playfair Display",serif; font-weight:700; font-size:30px; color:var(--navy); line-height:1; }
+  .popcard-acres span { font-family:"DM Sans",sans-serif; font-size:13px; font-weight:600; color:var(--muted); margin-left:6px; }
+  .popcard-addr { font-size:13px; color:var(--ink); margin-top:7px; }
+
+  .exportCtl { position:relative; font-family:"DM Sans",sans-serif; }
+  .expBtn { display:flex; align-items:center; gap:7px; background:var(--surface); color:var(--navy); border:1px solid var(--line); border-radius:8px; padding:8px 13px; font-size:13px; font-weight:600; cursor:pointer; box-shadow:0 1px 4px rgba(25,39,55,.12); }
+  .expBtn:hover { border-color:var(--sage); }
+  .expBtn[disabled] { opacity:.5; cursor:default; }
+  .expBtn .ico { font-size:15px; line-height:1; }
+  .expMenu { position:absolute; top:calc(100% + 6px); right:0; background:var(--surface); border:1px solid var(--line); border-radius:10px; box-shadow:0 6px 22px rgba(25,39,55,.18); overflow:hidden; min-width:168px; }
+  .expMenu .grp { font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); padding:9px 14px 4px; font-weight:700; }
+  .expMenu button { display:block; width:100%; text-align:left; background:none; border:none; padding:10px 14px; font-size:13px; color:var(--ink); cursor:pointer; font-family:inherit; }
+  .expMenu button:hover { background:var(--cream); color:var(--navy); }
+
+  @media (max-width:880px){
+    .body { grid-template-columns:1fr; }
+    #mapView { min-height:52vh; }
+    .rail { border-left:none; border-top:1px solid var(--line); }
+    .masthead .org { display:none; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="masthead">
+    <img class="mark" src="logo.svg" alt="City of Fair Oaks Ranch" />
+    <div class="titles">
+      <span class="eyebrow">Engineering Services &middot; GIS</span>
+      <h1>Parcel Acreage by County</h1>
+    </div>
+    <div class="org">
+      <b>City of Fair Oaks Ranch</b><br />
+      Authoritative source: Parcels (Public View)<br />
+      <span id="genDate"></span>
+    </div>
+  </header>
+
+  <section class="kpis" aria-label="Summary totals">
+    <div class="kpi"><div class="label">Total acreage <span class="scope" id="scope1"></span></div><div class="value"><span id="kpiAcres">&mdash;</span><span class="unit">acres</span></div></div>
+    <div class="kpi"><div class="label">Total parcels <span class="scope" id="scope2"></span></div><div class="value"><span id="kpiParcels">&mdash;</span></div></div>
+    <div class="kpi"><div class="label">Average parcel</div><div class="value"><span id="kpiAvg">&mdash;</span><span class="unit">acres</span></div></div>
+  </section>
+
+  <div class="body">
+    <div id="mapView">
+      <div class="state" id="mapState"><div class="spin"></div><div>Loading map&hellip;</div></div>
+    </div>
+
+    <aside class="rail loading" id="rail">
+      <h2>County breakdown</h2>
+      <p class="sub">Parcel acreage and counts by county, limited to parcels inside the City Limit or ETJ. Toggle to isolate either jurisdiction &mdash; the map and totals update together.</p>
+
+      <div class="segmented" id="boundaryFilter" role="group" aria-label="Jurisdiction">
+        <button data-b="all" class="active">All</button>
+        <button data-b="city">City Limit</button>
+        <button data-b="etj">ETJ</button>
+      </div>
+      <p class="scopeNote" id="scopeNote"></p>
+
+      <div class="splitLegend">
+        <span><i style="background:var(--navy)"></i>City Limit</span>
+        <span><i style="background:repeating-linear-gradient(45deg,var(--navy) 0 3px,var(--cream) 3px 6px)"></i>ETJ</span>
+      </div>
+
+      <div class="county-list" id="countyList"></div>
+      <p class="method">
+        Acreage is derived from each parcel's geometry: <code>Shape__Area &divide; 43,560</code>.
+        <code>Shape__Area</code> is square feet (WKID 102740, US survey feet), so the result is acres.
+        Counts and area sums are grouped by <code>COUNTY</code> and <code>Boundary</code>, filtered to City Limit and ETJ parcels only.
+      </p>
+    </aside>
+  </div>
+
+  <footer>
+    <span><span class="dot">&#9632;</span> Parcels &mdash; Public View</span>
+    <span>WKID 102740 (latest 2278)</span>
+    <span>Acres = Shape__Area &divide; 43,560</span>
+    <span id="footCount"></span>
+  </footer>
+
+</div>
+
+<div class="exportCtl" id="exportCtl" style="display:none">
+  <button class="expBtn" id="expBtn" disabled><span class="ico">&#8595;</span> Export map</button>
+  <div class="expMenu hidden" id="expMenu">
+    <div class="grp">Download current view</div>
+    <button data-fmt="png">PNG image</button>
+    <button data-fmt="jpg">JPG image</button>
+    <button data-fmt="pdf">PDF document</button>
+  </div>
+</div>
+
+<script>
+/* ===================== CONFIG ===================== */
+const SERVICE_URL    = "https://services6.arcgis.com/Cnwpb7mZuifVHE6A/arcgis/rest/services/Parcels_View/FeatureServer/0";
+const JURIS_URL      = "https://services6.arcgis.com/Cnwpb7mZuifVHE6A/arcgis/rest/services/FOR_Jurisdictional/FeatureServer/0";
+const COUNTY_FIELD   = "COUNTY";
+const BOUNDARY_FIELD = "Boundary";
+const AREA_FIELD     = "Shape__Area";
+const SQFT_PER_ACRE  = 43560;
+const LOGO_FILE      = "logo.svg";
+
+/* Jurisdiction filter — keep only City Limit & ETJ parcels (drops Other/null). */
+const WHERE_CITY = "UPPER(" + BOUNDARY_FIELD + ") LIKE '%CITY%'";
+const WHERE_ETJ  = "(UPPER(" + BOUNDARY_FIELD + ") LIKE '%ETJ%' OR UPPER(" + BOUNDARY_FIELD + ") LIKE '%EXTRA%')";
+const BASE_WHERE = "(" + WHERE_CITY + " OR " + WHERE_ETJ + ")";
+const FILTER_WHERE = { all: BASE_WHERE, city: WHERE_CITY, etj: WHERE_ETJ };
+
+const COUNTY_STYLE = {
+  "Bexar":   { fill:[25,39,55,0.72],    solid:"#192737" },
+  "Kendall": { fill:[141,149,108,0.72], solid:"#8D956C" },
+  "Comal":   { fill:[212,154,78,0.78],  solid:"#D49A4E" }
+};
+const OTHER_STYLE = { fill:[183,178,166,0.62], solid:"#B7B2A6" };
+const FILTER_LABEL = { all:"All jurisdictions", city:"City Limit", etj:"ETJ" };
+
+const nf0 = new Intl.NumberFormat("en-US",{ maximumFractionDigits:0 });
+const nf1 = new Intl.NumberFormat("en-US",{ maximumFractionDigits:1 });
+const nf2 = new Intl.NumberFormat("en-US",{ maximumFractionDigits:2 });
+
+document.getElementById("genDate").textContent =
+  "Generated " + new Date().toLocaleDateString("en-US",{ year:"numeric", month:"long", day:"numeric" });
+
+let COUNTIES = {};
+let currentFilter = "all";
+let layerRef = null;
+
+function normalizeBoundary(v){
+  if (v === null || v === undefined) return "other";
+  const s = String(v).toLowerCase();
+  if (s.indexOf("etj") >= 0 || s.indexOf("extra") >= 0) return "etj";
+  if (s.indexOf("city") >= 0) return "city";
+  return "other";
+}
+function classKey(f){ return f === "city" ? "city" : "etj"; }
+function selAcres(c, f){ return f === "all" ? c.city.a + c.etj.a + c.other.a : c[classKey(f)].a; }
+function selCount(c, f){ return f === "all" ? c.city.c + c.etj.c + c.other.c : c[classKey(f)].c; }
+function stripe(hex){ return "repeating-linear-gradient(45deg," + hex + " 0 3px,#ffffff 3px 6px)"; }
+
+/* ===================== STATS (direct REST POST) ===================== */
+async function loadStatsREST(){
+  const body = new URLSearchParams({
+    where: BASE_WHERE,
+    groupByFieldsForStatistics: COUNTY_FIELD + "," + BOUNDARY_FIELD,
+    outStatistics: JSON.stringify([
+      { statisticType:"sum",   onStatisticField:AREA_FIELD, outStatisticFieldName:"area_sum" },
+      { statisticType:"count", onStatisticField:"OBJECTID", outStatisticFieldName:"parcel_count" }
+    ]),
+    f: "json"
+  });
+  const resp = await fetch(SERVICE_URL + "/query", {
+    method:"POST", headers:{ "Content-Type":"application/x-www-form-urlencoded" }, body: body.toString()
+  });
+  const data = await resp.json();
+  if (data.error) throw new Error(data.error.message || "Query rejected by service");
+
+  (data.features || []).forEach(function(f){
+    const a = f.attributes || {};
+    let county = a[COUNTY_FIELD];
+    if (county === null || county === undefined || String(county).trim() === "") county = "Unspecified";
+    const cls = normalizeBoundary(a[BOUNDARY_FIELD]);
+    const C = COUNTIES[county] || (COUNTIES[county] = { city:{a:0,c:0}, etj:{a:0,c:0}, other:{a:0,c:0} });
+    C[cls].a += (a.area_sum || 0) / SQFT_PER_ACRE;
+    C[cls].c += (a.parcel_count || 0);
+  });
+
+  const haveCity = Object.keys(COUNTIES).some(n => COUNTIES[n].city.c > 0);
+  const haveEtj  = Object.keys(COUNTIES).some(n => COUNTIES[n].etj.c > 0);
+  document.querySelector('#boundaryFilter [data-b="city"]').disabled = !haveCity;
+  document.querySelector('#boundaryFilter [data-b="etj"]').disabled  = !haveEtj;
+
+  document.getElementById("rail").classList.remove("loading");
+  renderStats(currentFilter);
+}
+
+function renderStats(filter){
+  currentFilter = filter;
+  const names = Object.keys(COUNTIES).sort((x,y)=> selAcres(COUNTIES[y],filter) - selAcres(COUNTIES[x],filter));
+  const totalAcres = names.reduce((s,n)=> s + selAcres(COUNTIES[n],filter), 0);
+  const totalCount = names.reduce((s,n)=> s + selCount(COUNTIES[n],filter), 0);
+
+  document.getElementById("kpiAcres").textContent = nf0.format(totalAcres);
+  document.getElementById("kpiParcels").textContent = nf0.format(totalCount);
+  document.getElementById("kpiAvg").textContent = nf1.format(totalCount ? totalAcres/totalCount : 0);
+  document.getElementById("footCount").textContent = nf0.format(totalCount) + " parcels analyzed";
+
+  const scopeTxt = filter === "all" ? "" : "\u00b7 " + FILTER_LABEL[filter];
+  document.getElementById("scope1").textContent = scopeTxt;
+  document.getElementById("scope2").textContent = scopeTxt;
+  document.getElementById("scopeNote").innerHTML =
+    "Showing <b>" + FILTER_LABEL[filter] + "</b> &mdash; " + nf0.format(totalCount) + " parcels, " + nf0.format(totalAcres) + " acres";
+
+  const list = document.getElementById("countyList");
+  list.innerHTML = "";
+  names.forEach(function(name){
+    const C = COUNTIES[name];
+    const style = COUNTY_STYLE[name] || OTHER_STYLE;
+    const acres = selAcres(C, filter), count = selCount(C, filter);
+    const share = totalAcres ? (acres/totalAcres)*100 : 0;
+
+    let segs;
+    if (filter === "all"){
+      const ct = acres || 1;
+      segs =
+        '<span class="seg" style="width:'+(C.city.a/ct*100)+'%;background:'+style.solid+'"></span>'+
+        '<span class="seg" style="width:'+(C.etj.a/ct*100)+'%;background:'+stripe(style.solid)+'"></span>'+
+        '<span class="seg" style="width:'+(C.other.a/ct*100)+'%;background:'+OTHER_STYLE.solid+'"></span>';
+    } else if (filter === "etj"){
+      segs = '<span class="seg" style="width:100%;background:'+stripe(style.solid)+'"></span>';
+    } else {
+      segs = '<span class="seg" style="width:100%;background:'+style.solid+'"></span>';
+    }
+
+    const splitLine = filter === "all"
+      ? '<div class="split">City Limit <b style="color:var(--ink)">'+nf0.format(C.city.a)+'</b> ac &middot; ETJ <b style="color:var(--ink)">'+nf0.format(C.etj.a)+'</b> ac'+
+        (C.other.a >= 1 ? ' &middot; Other '+nf0.format(C.other.a)+' ac' : '')+'</div>'
+      : '<div class="split">'+FILTER_LABEL[filter]+' only</div>';
+
+    const card = document.createElement("div");
+    card.className = "county";
+    card.innerHTML =
+      '<div class="row1"><span class="swatch" style="background:'+style.solid+'"></span>'+
+      '<span class="name">'+name+'</span>'+
+      '<span class="share">'+nf1.format(share)+'% of acreage</span></div>'+
+      '<div class="acres">'+nf0.format(acres)+'<span class="unit">acres</span></div>'+
+      '<div class="meta"><b>'+nf0.format(count)+'</b> parcels &middot; avg <b>'+nf1.format(count ? acres/count : 0)+'</b> ac</div>'+
+      splitLine +
+      '<div class="band"><div class="fill">'+segs+'</div></div>';
+    list.appendChild(card);
+    const fill = card.querySelector(".band .fill");
+    requestAnimationFrame(()=>{ fill.style.width = share + "%"; });
+  });
+}
+
+function statsFailed(){
+  document.getElementById("rail").classList.remove("loading");
+  document.getElementById("countyList").innerHTML =
+    '<p class="sub">Acreage totals could not be calculated &mdash; the service may not be shared publicly. The map and export still work.</p>';
+}
+
+/* ===================== POPUP (branded, area shown as acres) ===================== */
+function popupContent(feature){
+  const a = feature.graphic.attributes;
+  const acres  = (a[AREA_FIELD] || 0) / SQFT_PER_ACRE;
+  const county = a[COUNTY_FIELD] || "Unspecified";
+  const juris  = a[BOUNDARY_FIELD] || "\u2014";
+  const addr   = a.ADDRESS || a.NAME || "Parcel";
+  const clsMap = { Bexar:"is-bexar", Kendall:"is-kendall", Comal:"is-comal" };
+
+  const el = document.createElement("div");
+  el.className = "popcard " + (clsMap[county] || "is-other");
+  const bar = document.createElement("div"); bar.className = "popcard-bar"; el.appendChild(bar);
+  const main = document.createElement("div");
+
+  const eb = document.createElement("div"); eb.className = "popcard-eyebrow";
+  eb.textContent = county + " County \u00b7 " + juris; main.appendChild(eb);
+  const ac = document.createElement("div"); ac.className = "popcard-acres";
+  ac.textContent = nf2.format(acres);
+  const u = document.createElement("span"); u.textContent = "acres"; ac.appendChild(u);
+  main.appendChild(ac);
+  const ad = document.createElement("div"); ad.className = "popcard-addr"; ad.textContent = addr; main.appendChild(ad);
+
+  el.appendChild(main);
+  return el;
+}
+
+/* ===================== MAP ===================== */
+whenRequireReady(initMap, function(){
+  showDiagnostic("The ArcGIS SDK did not load", [
+    "The page could not reach <a href='https://js.arcgis.com/4.31/' target='_blank' rel='noopener'>js.arcgis.com</a>.",
+    "If your other gis.local maps still load, allow this host through the intranet firewall."
+  ]);
+});
+function whenRequireReady(cb, onFail){
+  if (typeof require !== "undefined") return cb();
+  let waited = 0;
+  const iv = setInterval(function(){
+    if (typeof require !== "undefined"){ clearInterval(iv); cb(); }
+    else if ((waited += 150) > 10000){ clearInterval(iv); onFail(); }
+  }, 150);
+}
+
+function initMap(){
+  require([
+    "esri/Map","esri/views/MapView","esri/layers/FeatureLayer",
+    "esri/renderers/UniqueValueRenderer","esri/symbols/SimpleFillSymbol","esri/symbols/SimpleLineSymbol"
+  ], function (Map, MapView, FeatureLayer, UniqueValueRenderer, SimpleFillSymbol, SimpleLineSymbol) {
+
+    const outline = new SimpleLineSymbol({ color:[250,246,238,0.85], width:0.4 });
+    const fill = rgba => new SimpleFillSymbol({ color:rgba, outline:outline });
+
+    const renderer = new UniqueValueRenderer({
+      field: COUNTY_FIELD,
+      defaultSymbol: fill(OTHER_STYLE.fill),
+      defaultLabel: "Other / unspecified",
+      uniqueValueInfos: Object.keys(COUNTY_STYLE).map(c => ({ value:c, label:c+" County", symbol:fill(COUNTY_STYLE[c].fill) }))
+    });
+
+    const layer = new FeatureLayer({
+      url: SERVICE_URL,
+      renderer: renderer,
+      definitionExpression: BASE_WHERE,                       // City Limit + ETJ only
+      outFields: [COUNTY_FIELD, BOUNDARY_FIELD, "ADDRESS", "NAME", AREA_FIELD],
+      popupTemplate: {
+        title: function(f){ const a=f.graphic.attributes; return a.ADDRESS || a.NAME || "Parcel detail"; },
+        outFields: ["*"],
+        content: popupContent
+      }
+    });
+    layerRef = layer;
+
+    const map = new Map({ basemap:"gray-vector", layers:[layer] });
+    const view = new MapView({ container:"mapView", map:map, constraints:{ snapToZoom:false }, ui:{ components:["zoom","attribution"] } });
+
+    const mapState = document.getElementById("mapState");
+    let viewReady = false;
+    const watchdog = setTimeout(function(){
+      if (!viewReady) showDiagnostic("The map is taking longer than expected", [
+        "Open this in a new tab &mdash; it should return JSON, not a sign-in prompt:",
+        "<a href='"+SERVICE_URL+"?f=pjson' target='_blank' rel='noopener'>"+SERVICE_URL+"</a>",
+        "If it prompts to sign in, the layer isn't shared publicly."
+      ]);
+    }, 12000);
+
+    view.when(function(){
+      viewReady = true; clearTimeout(watchdog);
+      mapState.classList.add("hidden");
+      document.getElementById("expBtn").disabled = false;
+      frameToJurisdiction(view, FeatureLayer, layer);   // set extent to FOR_Jurisdictional
+    }).catch(function(err){
+      clearTimeout(watchdog); console.error("MapView failed:", err);
+      showDiagnostic("The map view could not initialize", [String(err && err.message || err)]);
+    });
+
+    layer.when().catch(function(err){
+      console.error("Layer failed:", err);
+      showBanner("Parcels could not be drawn — the layer may not be shared publicly. Totals are queried separately.");
+    });
+
+    wireFilter();
+    setupExport(view);
+  });
+}
+
+/* Center on the jurisdictional boundary extent (CoFOR pattern). Falls back to parcels. */
+function frameToJurisdiction(view, FeatureLayer, parcelLayer){
+  const juris = new FeatureLayer({ url: JURIS_URL });
+  juris.queryExtent().then(function(r){
+    if (r && r.extent) return view.goTo(r.extent.expand(1.12));
+    throw new Error("no jurisdictional extent");
+  }).catch(function(){
+    if (parcelLayer.fullExtent) view.goTo(parcelLayer.fullExtent.expand(1.08)).catch(()=>{});
+  });
+}
+
+/* ===================== FILTER ===================== */
+function applyMapFilter(filter){ if (layerRef) layerRef.definitionExpression = FILTER_WHERE[filter]; }
+function wireFilter(){
+  document.querySelectorAll('#boundaryFilter button').forEach(function(b){
+    b.addEventListener("click", function(){
+      if (b.disabled) return;
+      document.querySelectorAll('#boundaryFilter button').forEach(x=>x.classList.remove("active"));
+      b.classList.add("active");
+      renderStats(b.dataset.b);
+      applyMapFilter(b.dataset.b);
+    });
+  });
+}
+
+/* ===================== EXPORT ===================== */
+function setupExport(view){
+  const ctl = document.getElementById("exportCtl");
+  ctl.style.display = ""; view.ui.add(ctl, "top-right");
+  const btn = document.getElementById("expBtn"), menu = document.getElementById("expMenu");
+  btn.addEventListener("click", e => { e.stopPropagation(); menu.classList.toggle("hidden"); });
+  document.addEventListener("click", () => menu.classList.add("hidden"));
+  menu.addEventListener("click", e => e.stopPropagation());
+  menu.querySelectorAll("button[data-fmt]").forEach(b => {
+    b.addEventListener("click", () => { menu.classList.add("hidden"); exportMap(view, b.dataset.fmt); });
+  });
+}
+async function exportMap(view, fmt){
+  const btn = document.getElementById("expBtn"); const label = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = '<span class="ico">&#8987;</span> Preparing&hellip;';
+  try {
+    const shot = await view.takeScreenshot({ format:"png", quality:100 });
+    const canvas = await buildBrandedCanvas(shot.dataUrl);
+    const stamp = new Date().toISOString().slice(0,10);
+    const scope = currentFilter === "all" ? "" : "_" + FILTER_LABEL[currentFilter].replace(/\s+/g,"");
+    const base = "CoFOR_Parcel_Acreage_by_County" + scope + "_" + stamp;
+    if (fmt === "pdf") await exportPDF(canvas, base);
+    else triggerDownload(canvas.toDataURL(fmt === "jpg" ? "image/jpeg" : "image/png", 0.95), base + "." + fmt);
+  } catch (err) { console.error("Export failed:", err); alert("Export failed: " + (err && err.message ? err.message : err)); }
+  finally { btn.disabled = false; btn.innerHTML = label; }
+}
+function loadImage(src){ return new Promise((res, rej)=>{ const i=new Image(); i.crossOrigin="anonymous"; i.onload=()=>res(i); i.onerror=rej; i.src=src; }); }
+async function buildBrandedCanvas(mapDataUrl){
+  await (document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve());
+  const mapImg = await loadImage(mapDataUrl);
+  let logoImg = null; try { logoImg = await loadImage(LOGO_FILE); } catch(e){}
+
+  const W = mapImg.width, mapH = mapImg.height;
+  const headH = Math.max(72, Math.round(W*0.072)), footH = Math.max(54, Math.round(W*0.052)), pad = Math.round(headH*0.28);
+  const cv = document.createElement("canvas"); cv.width = W; cv.height = headH + mapH + footH;
+  const g = cv.getContext("2d");
+
+  g.fillStyle = "#FAF6EE"; g.fillRect(0,0,cv.width,cv.height);
+  g.fillStyle = "#192737"; g.fillRect(0,0,W,headH);
+  let textX = pad;
+  if (logoImg){ const lh=Math.round(headH*0.6), lw=Math.round(lh*(954.59/861.88)); try{ g.drawImage(logoImg,pad,Math.round((headH-lh)/2),lw,lh); textX=pad+lw+Math.round(pad*0.7);}catch(e){} }
+  g.textBaseline="middle"; g.fillStyle="#FFFFFF";
+  g.font='700 '+Math.round(headH*0.34)+"px 'Playfair Display', Georgia, serif";
+  let title = "Parcel Acreage by County"; if (currentFilter!=="all") title += "  \u2014  " + FILTER_LABEL[currentFilter];
+  g.fillText(title, textX, Math.round(headH*0.40));
+  g.fillStyle="#C8CDBA"; g.font='600 '+Math.round(headH*0.20)+"px 'DM Sans', sans-serif";
+  g.fillText("City of Fair Oaks Ranch  \u00b7  " + new Date().toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"}), textX, Math.round(headH*0.72));
+
+  g.drawImage(mapImg, 0, headH, W, mapH);
+
+  const fy = headH + mapH;
+  g.fillStyle="#FFFFFF"; g.fillRect(0,fy,W,footH);
+  g.fillStyle="#E4DECF"; g.fillRect(0,fy,W,2);
+  g.textBaseline="middle";
+  const names = Object.keys(COUNTIES).sort((x,y)=> selAcres(COUNTIES[y],currentFilter)-selAcres(COUNTIES[x],currentFilter));
+  const totalAcres = names.reduce((s,n)=> s+selAcres(COUNTIES[n],currentFilter), 0);
+  let line = names.map(n=> n+" "+nf0.format(selAcres(COUNTIES[n],currentFilter))+" ac").join("   \u00b7   ");
+  line = names.length ? line + "   \u00b7   Total " + nf0.format(totalAcres) + " ac" : "Acreage totals unavailable";
+  g.fillStyle="#192737"; g.font='700 '+Math.round(footH*0.30)+"px 'DM Sans', sans-serif";
+  g.fillText(line, pad, fy+Math.round(footH*0.38));
+  g.fillStyle="#6B6F66"; g.font='500 '+Math.round(footH*0.22)+"px 'DM Sans', sans-serif";
+  g.fillText("Acres = Shape__Area \u00f7 43,560  \u00b7  Source: Parcels (Public View)  \u00b7  WKID 102740"
+    + (currentFilter!=="all" ? "  \u00b7  Scope: "+FILTER_LABEL[currentFilter] : ""), pad, fy+Math.round(footH*0.72));
+  return cv;
+}
+function loadScript(src){ return new Promise((res,rej)=>{ const s=document.createElement("script"); s.src=src; s.onload=res; s.onerror=()=>rej(new Error("blocked")); document.head.appendChild(s); }); }
+async function getJsPDF(){
+  if (window.jspdf && window.jspdf.jsPDF) return window.jspdf.jsPDF;
+  const amd = window.define && window.define.amd; if (amd) window.define.amd = undefined;
+  try { await loadScript("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"); }
+  catch(e){ return null; } finally { if (amd) window.define.amd = amd; }
+  return window.jspdf && window.jspdf.jsPDF;
+}
+async function exportPDF(canvas, base){
+  const JsPDF = await getJsPDF();
+  if (!JsPDF){
+    const url = canvas.toDataURL("image/png"); const w = window.open("");
+    if (!w){ alert("Pop-up blocked. Allow pop-ups for PDF, or use PNG/JPG."); return; }
+    w.document.write('<img src="'+url+'" style="width:100%" onload="setTimeout(function(){window.print()},250)">'); w.document.close(); return;
+  }
+  const landscape = canvas.width >= canvas.height;
+  const pdf = new JsPDF({ orientation: landscape?"landscape":"portrait", unit:"pt", format:"letter" });
+  const pw=pdf.internal.pageSize.getWidth(), ph=pdf.internal.pageSize.getHeight(), m=24;
+  const scale=Math.min((pw-2*m)/canvas.width,(ph-2*m)/canvas.height), w=canvas.width*scale, h=canvas.height*scale;
+  pdf.addImage(canvas.toDataURL("image/jpeg",0.95),"JPEG",(pw-w)/2,(ph-h)/2,w,h);
+  pdf.save(base + ".pdf");
+}
+function triggerDownload(url, filename){ const a=document.createElement("a"); a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); }
+
+/* ===================== UI helpers ===================== */
+function showDiagnostic(title, lines){
+  const s = document.getElementById("mapState"); s.classList.remove("hidden");
+  s.innerHTML = '<div><b>'+title+'</b></div><ul>'+lines.map(l=>'<li>'+l+'</li>').join("")+'</ul>';
+}
+function showBanner(msg){
+  const host=document.getElementById("mapView"); const b=document.createElement("div"); b.className="banner"; b.textContent=msg;
+  host.appendChild(b); setTimeout(()=>{ b.style.transition="opacity .5s"; b.style.opacity="0"; setTimeout(()=>b.remove(),600); }, 9000);
+}
+
+loadStatsREST().catch(function(err){ console.error("Stats failed:", err); statsFailed(); });
+</script>
+</body>
+</html>
