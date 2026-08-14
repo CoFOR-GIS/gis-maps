@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- lua-dashboard · v1.1.0 (2026-08-14) · keep in sync with APP_META and STATE.md -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -89,6 +90,29 @@
   }
   tr.total td,tr.subtotal td{border-top:2px solid var(--olive)}
   tr.buildout td{border-bottom:none}
+
+  /* ---------- connection-table section bands ----------
+     Rows carry grp-today / grp-future / grp-buildout from CONN_ROWS[].group.
+     Today's connections band in olive, future connections in slate blue,
+     and Build Out — derived from both — gets a split accent and a blended
+     background. grp-start opens a gap where a new band begins. */
+  #connTable{--grp-future:#6f8fae}
+  #connTable td:first-child{position:relative}
+  #connTable tr[class*="grp-"] td:first-child{padding-left:.9rem}
+  #connTable tr[class*="grp-"] td:first-child::before{
+    content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
+  }
+  #connTable tr.grp-today{background:rgba(141,149,108,.08)}
+  #connTable tr.grp-today td:first-child::before{background:var(--olive)}
+  #connTable tr.grp-future{background:rgba(111,143,174,.11)}
+  #connTable tr.grp-future td:first-child::before{background:var(--grp-future)}
+  #connTable tr.grp-buildout{
+    background:linear-gradient(90deg,rgba(141,149,108,.10),rgba(111,143,174,.13));
+  }
+  #connTable tr.grp-buildout td:first-child::before{
+    background:linear-gradient(180deg,var(--olive) 0 50%,var(--grp-future) 50% 100%);
+  }
+  #connTable tr.grp-start td{border-top:6px solid var(--navy)}
   .bar{position:relative;height:5px;background:var(--navy-3);border-radius:3px;margin-top:.3rem;overflow:hidden}
   .bar i{position:absolute;inset:0;right:auto;background:var(--olive);border-radius:3px;transition:width .5s ease}
 
@@ -183,6 +207,12 @@
    Add a row/column/filter by adding an object; the layout renders itself.
    ======================================================================= */
 
+/* Deployment identity. Bump `version` on every published change, mirror it
+   in the HTML comment on line 2, and log the change in STATE.md. Shown in
+   the status line and in the console so any deployed copy self-identifies
+   (compare gis.local vs GitHub Pages at a glance). */
+const APP_META = { app:"lua-dashboard", version:"1.1.0", released:"2026-08-14" };
+
 /* Dashboard-tailored public view (was bd5079b30310433998c6a54652074dd6 —
    make sure Pro comparisons use this same item). */
 const PARCELS_ITEM_ID = "3413d6379752460ab3f52b946a6e9095";
@@ -233,52 +263,56 @@ const ROW_INFO = { enabled: false };
 
 /* Each parcel is normalized to: {lua, status, w, s, mw, ms, county, subdiv, unit}
    Rows define match() (which parcels count) and val() (what each contributes).
-   Rows with derive() are computed from other rows after the pass. */
+   Rows with derive() are computed from other rows after the pass.
+   group: "today" | "future" | "buildout" drives the section bands (accent
+   bar + tint per group; a gap opens automatically where the group changes).
+   Build Out is "buildout" because its formula draws on both groups —
+   numerator from today's rows, denominator from today's + future's. */
 const CONN_ROWS = [
-  { label:"Existing - Residential", id:"res",
+  { label:"Existing - Residential", id:"res", group:"today",
     match:p => p.lua==="FORU" && p.status==="Improved",
     val:p => [p.w, p.s],
     info:"Water and sewer connections on improved (built) residential parcels served by Fair Oaks Ranch Utilities.", infoOn:false },
 
-  { label:"Existing - Non-Residential", id:"nonres",
+  { label:"Existing - Non-Residential", id:"nonres", group:"today",
     match:p => p.lua==="FORU" && NON_RES.includes(p.status),
     val:p => [p.w, p.s],
     info:"Connections on FORU-served commercial, institutional, government, greenspace/drainage, right-of-way, and other non-residential parcels.", infoOn:false },
 
-  { label:"Permitted (New Homes)", id:"perm",
+  { label:"Permitted (New Homes)", id:"perm", group:"today",
     match:p => p.lua==="FORU" && p.status==="Permitted",
     val:p => [p.w, p.s],
     info:"Connections on FORU-served parcels with an active building permit.", infoOn:false },
 
-  { label:"Vacant (No Permit)", id:"vac",
+  { label:"Vacant (No Permit)", id:"vac", group:"today",
     match:p => p.lua==="FORU" && p.status==="Vacant",
     val:p => [p.w, p.s],
     info:"Connections already assigned to vacant FORU-served parcels that have no active permit.", infoOn:false },
 
-  { label:"Total", id:"total", cls:"total",
+  { label:"Total", id:"total", cls:"total", group:"today",
     derive:r => [ r.res[0]+r.nonres[0]+r.perm[0]+r.vac[0],
                   r.res[1]+r.nonres[1]+r.perm[1]+r.vac[1] ],
     info:"Sum of the four categories above — all connections in service or assigned today.", infoOn:false },
 
-  { label:"Future (Reserved)", id:"resv",
+  { label:"Future (Reserved)", id:"resv", group:"future",
     match:p => p.lua==="FORU" && p.status==="Reserved" && (p.w>=1 || p.s>=1),
     val:p => [p.w, p.s],
     info:"Connections on parcels reserved for future development.", infoOn:false },
 
-  { label:"Future (Planned)*", id:"plan",
+  { label:"Future (Planned)*", id:"plan", group:"future",
     match:p => p.lua==="FORU",
     val:p => [ p.mw>0 ? Math.max(p.mw-p.w,0) : 0,
                p.ms>0 ? Math.max(p.ms-p.s,0) : 0 ],
     info:"Additional connections anticipated by the utility master plan beyond what exists today (master plan minus current, per parcel).", infoOn:false },
 
-  { label:"Future Total", id:"future", cls:"subtotal",
+  { label:"Future Total", id:"future", cls:"subtotal", group:"future",
     derive:r => [ r.resv[0]+r.plan[0], r.resv[1]+r.plan[1] ],
     info:"Future (Reserved) plus Future (Planned) — all connections still to come at full build-out.", infoOn: true },
 
   /* Explicit build-out formula: connected today ÷ ultimate connections.
      Adjust the denominator here if your intended definition differs —
      it is now visible instead of buried in a dashboard "reference". */
-  { label:"BUILD OUT (%)", id:"build", cls:"buildout", pct:true,
+  { label:"BUILD OUT (%)", id:"build", cls:"buildout", group:"buildout", pct:true,
     derive:r => {
       const num = i => r.res[i]+r.nonres[i]+r.perm[i];
       const den = i => num(i) + r.vac[i] + r.resv[i] + r.plan[i];
@@ -328,8 +362,13 @@ const RENDER_GROUPS = [
     ["Non-Residential No Service",  "Non-Residential No Service",  "#7cbf8c"]
   ]},
   { heading:"Undeveloped Areas to be served by FORU", classes:[
-    ["Reserved",                    "Reserved",                    "#e9a9c9"],
-    ["Future Connections",          "Future Connections*",         "#b5524d"]
+    /* v1.1.0 color tweaks (CIECAM02 analysis — see STATE.md):
+       Reserved  #e9a9c9 -> #e893c9  (was near-identical to the Non-Res
+                                      gray #bfbfbf for red-green CVD, dE 4)
+       Future    #b5524d -> #96322e  (was dE 10 from Not Serviced #c4706b
+                                      for everyone; now dE ~22)            */
+    ["Reserved",                    "Reserved",                    "#e893c9"],
+    ["Future Connections",          "Future Connections*",         "#96322e"]
   ]}
 ];
 
@@ -420,7 +459,12 @@ require([
       type:"unique-value",
       valueExpression: RENDER_EXPR,
       valueExpressionTitle: "Utility Service",
-      defaultSymbol: sym("#3f3f3f"),
+      /* No defaultSymbol (v1.1.0): RENDER_EXPR always ends in a value that
+         exists in RENDER_GROUPS, so the default was never used — but its
+         presence made the Legend widget append an empty "Other" entry.
+         Trade-off: if the expression ever returns an unlisted value, those
+         parcels now draw NOTHING instead of dark gray. A parcel "missing"
+         from the map = add the class to RENDER_GROUPS or fix the data. */
       uniqueValueGroups: RENDER_GROUPS.map(g => ({
         heading: g.heading,
         classes: g.classes.map(([value,label,color]) =>
@@ -532,14 +576,15 @@ require([
       // Console access for troubleshooting, e.g.:
       // debugLUA.parcels.filter(p => p.status==="Vacant" && p.lua==="SAWS")
       // debugLUA.verifySymbology()  -> category counts to compare with the legend
-      window.debugLUA = { parcels, F, selections: () => selections, verifySymbology };
+      window.debugLUA = { parcels, F, meta: APP_META, selections: () => selections, verifySymbology };
 
       buildFilterOptions();
       applyAndRender();
       statusEl.textContent =
         `${parcels.length.toLocaleString()} parcels` +
         (short ? ` of ${serverCount.toLocaleString()} on server (INCOMPLETE)` : "") +
-        ` · updated ${new Date().toLocaleTimeString()}`;
+        ` · updated ${new Date().toLocaleTimeString()}` +
+        ` · v${APP_META.version}`;
       statusEl.classList.toggle("err", short);
     }catch(e){
       console.error(e);
@@ -743,10 +788,18 @@ require([
 
     const tbody = document.querySelector("#connTable tbody");
     tbody.innerHTML = "";
+    let prevGroup = null;
     for (const row of CONN_ROWS){
       const [w,s] = results[row.id];
       const tr = document.createElement("tr");
-      if (row.cls) tr.className = row.cls;
+      const cls = [];
+      if (row.cls) cls.push(row.cls);
+      if (row.group){
+        cls.push("grp-" + row.group);
+        if (prevGroup !== null && row.group !== prevGroup) cls.push("grp-start");
+      }
+      prevGroup = row.group ?? prevGroup;
+      if (cls.length) tr.className = cls.join(" ");
       tr.innerHTML = `<td>${esc(row.label)}</td>` +
         [w,s].map(v => row.pct
           ? `<td class="num">${Math.round(v*100)}%<div class="bar"><i style="width:${Math.min(v*100,100)}%"></i></div></td>`
@@ -814,6 +867,7 @@ require([
 
   function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 
+  console.info(`${APP_META.app} v${APP_META.version} (${APP_META.released})`);
   document.getElementById("refresh").addEventListener("click", loadParcels);
   loadParcels();
 });
