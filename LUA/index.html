@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Land Use Assumptions | City of Fair Oaks Ranch</title>
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=DM+Serif+Display&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://js.arcgis.com/4.31/esri/themes/dark/main.css">
+<style>
+  :root{
+    --navy:#192737;        /* CoFOR .st1 */
+    --navy-2:#22334a;
+    --navy-3:#2c405c;
+    --cream:#f2ecd8;
+    --cream-dim:#cfc6a8;
+    --olive:#8d956c;       /* CoFOR .st2 */
+    --brick:#a5514c;
+    --brick-2:#b25e58;
+    --line:rgba(242,236,216,.14);
+    font-size:15px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    font-family:"DM Sans",system-ui,sans-serif;
+    background:var(--navy);
+    color:var(--cream);
+    display:flex;flex-direction:column;
+  }
+
+  /* ---------- header + filters ---------- */
+  header{
+    display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;
+    padding:.65rem 1rem;border-bottom:1px solid var(--line);
+  }
+  .brand h1{font-family:"DM Serif Display",serif;font-weight:400;font-size:1.35rem;line-height:1.1}
+  .brand p{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--olive)}
+  #filters{display:flex;gap:.5rem;flex-wrap:wrap;margin-left:auto}
+
+  .msel{position:relative}
+  .msel > button{
+    font:inherit;font-size:.8rem;color:var(--cream);
+    background:var(--navy-2);border:1px solid var(--line);border-radius:4px;
+    padding:.4rem .6rem;cursor:pointer;min-width:9rem;text-align:left;
+    display:flex;justify-content:space-between;gap:.5rem;align-items:baseline;
+  }
+  .msel > button:focus-visible{outline:2px solid var(--olive);outline-offset:1px}
+  .msel > button .lbl{color:var(--cream-dim);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase}
+  .msel .panel{
+    position:absolute;z-index:60;top:calc(100% + 4px);left:0;
+    width:15rem;max-height:310px;display:none;flex-direction:column;
+    background:var(--navy-2);border:1px solid var(--line);border-radius:6px;
+    box-shadow:0 10px 28px rgba(0,0,0,.45);
+  }
+  .msel.open .panel{display:flex}
+  .msel .panel input[type=search]{
+    font:inherit;font-size:.8rem;color:var(--cream);background:var(--navy-3);
+    border:none;border-bottom:1px solid var(--line);padding:.5rem .6rem;border-radius:6px 6px 0 0;
+  }
+  .msel .opts{overflow:auto;padding:.25rem 0}
+  .msel label{
+    display:flex;gap:.5rem;align-items:center;font-size:.8rem;
+    padding:.3rem .6rem;cursor:pointer;
+  }
+  .msel label:hover{background:var(--navy-3)}
+  .msel .all{border-bottom:1px solid var(--line);font-weight:500}
+  .msel input[type=checkbox]{accent-color:var(--olive)}
+
+  #refresh{
+    font:inherit;font-size:.8rem;color:var(--navy);background:var(--olive);
+    border:none;border-radius:4px;padding:.4rem .8rem;cursor:pointer;font-weight:500;
+  }
+  #refresh:disabled{opacity:.5;cursor:wait}
+
+  /* ---------- layout ---------- */
+  main{flex:1;display:grid;grid-template-columns:minmax(0,1fr) minmax(430px,46%);min-height:0}
+  #viewDiv{min-height:320px}
+  #stats{overflow:auto;padding:1rem 1.25rem;border-left:1px solid var(--line)}
+  .note{font-size:.7rem;font-style:italic;color:var(--cream-dim);margin-bottom:.35rem}
+
+  table{width:100%;border-collapse:collapse;margin-bottom:1.6rem}
+  th,td{padding:.55rem .6rem;border-bottom:1px solid var(--line);text-align:right}
+  th:first-child,td:first-child{text-align:left;font-size:.8rem;color:var(--cream-dim);width:44%}
+  thead th{font-size:.85rem;font-weight:700;color:var(--cream)}
+  td.num{
+    font-size:1.45rem;font-variant-numeric:tabular-nums;letter-spacing:.01em;
+  }
+  tr.total td,tr.subtotal td{border-top:2px solid var(--olive)}
+  tr.buildout td{border-bottom:none}
+  .bar{position:relative;height:5px;background:var(--navy-3);border-radius:3px;margin-top:.3rem;overflow:hidden}
+  .bar i{position:absolute;inset:0;right:auto;background:var(--olive);border-radius:3px;transition:width .5s ease}
+
+  #providerTable thead th{background:var(--brick);color:var(--cream);padding:.6rem}
+  #providerTable td,#providerTable th{border-color:rgba(242,236,216,.22)}
+  #providerTable tbody tr{background:var(--brick)}
+  #providerTable tbody tr:nth-child(even){background:var(--brick-2)}
+  #providerTable td:first-child{color:var(--cream)}
+
+  #status{font-size:.75rem;color:var(--cream-dim);margin-bottom:.75rem}
+  #status.err{color:#e2a19c}
+
+  /* ---------- popup + widget theming (match app palette) ---------- */
+  .esri-widget, .esri-popup{font-family:"DM Sans",system-ui,sans-serif}
+  .esri-ui .esri-popup, .esri-popup, .esri-features{
+    /* Calcite tokens used by the 4.x popup */
+    --calcite-color-foreground-1: var(--navy-2);
+    --calcite-color-foreground-2: var(--navy-3);
+    --calcite-color-foreground-3: var(--navy-3);
+    --calcite-color-text-1: var(--cream);
+    --calcite-color-text-2: var(--cream-dim);
+    --calcite-color-text-3: var(--cream-dim);
+    --calcite-color-border-1: var(--line);
+    --calcite-color-border-2: var(--line);
+    --calcite-color-border-3: var(--line);
+    --calcite-color-brand: var(--olive);
+    --calcite-color-brand-hover: var(--olive);
+  }
+  .esri-popup .esri-widget__table tr th{color:var(--cream-dim);font-weight:500}
+  .esri-popup .esri-widget__table tr td{color:var(--cream)}
+  .esri-popup .esri-popup__header-title{font-family:"DM Serif Display",serif;font-weight:400}
+
+  /* ---------- row info popovers (framework — enable via ROW_INFO) ---------- */
+  .info-btn{
+    font:inherit;width:1.05rem;height:1.05rem;line-height:1;margin-left:.4rem;
+    border-radius:50%;border:1px solid var(--cream-dim);background:none;
+    color:var(--cream-dim);font-size:.65rem;cursor:pointer;vertical-align:middle;
+  }
+  .info-btn:hover,.info-btn[aria-expanded="true"]{border-color:var(--olive);color:var(--olive)}
+  #providerTable .info-btn{border-color:rgba(242,236,216,.5);color:var(--cream)}
+  .info-pop{
+    position:absolute;z-index:80;max-width:20rem;
+    background:var(--navy-3);color:var(--cream);border:1px solid var(--olive);
+    border-radius:6px;padding:.7rem .8rem;font-size:.78rem;line-height:1.45;
+    box-shadow:0 10px 28px rgba(0,0,0,.5);
+  }
+  .info-pop b{color:var(--olive)}
+
+  @media (max-width:900px){
+    main{grid-template-columns:1fr;grid-template-rows:45vh minmax(0,1fr)}
+    #stats{border-left:none;border-top:1px solid var(--line)}
+    #filters{margin-left:0}
+  }
+  @media (prefers-reduced-motion:reduce){ .bar i{transition:none} }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <h1>City of Fair Oaks Ranch</h1>
+    <p>Land Use Assumptions</p>
+  </div>
+  <div id="filters" aria-label="Filters"></div>
+  <button id="refresh" title="Re-query the parcel layer">Refresh data</button>
+</header>
+
+<main>
+  <div id="viewDiv"></div>
+  <aside id="stats">
+    <div id="status">Loading parcel data…</div>
+    <p class="note">*Subject to change</p>
+
+    <table id="connTable">
+      <thead>
+        <tr><th></th><th>Water Connections</th><th>Sewer Connections</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <table id="providerTable">
+      <thead><tr id="providerHead"><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </aside>
+</main>
+
+<script src="https://js.arcgis.com/4.31/"></script>
+<script>
+/* =======================================================================
+   CONFIG — everything the dashboard displays is defined here.
+   Add a row/column/filter by adding an object; the layout renders itself.
+   ======================================================================= */
+
+/* Dashboard-tailored public view (was bd5079b30310433998c6a54652074dd6 —
+   make sure Pro comparisons use this same item). */
+const PARCELS_ITEM_ID = "3413d6379752460ab3f52b946a6e9095";
+const PARCELS_LAYER_ID = 0;
+
+/* One place for field names. If the schema drifts (Water_Connect vs
+   Num__of_Connections_Water), fix it here and nowhere else. */
+const F = {
+  address: "ADDRESS",
+  water:   "Num__of_Connections_Water",
+  sewer:   "Num__of_Connections_Sewer",
+  lua:     "LUA",
+  status:  "textImproved",
+  masterW: "MasterWater",
+  masterS: "MasterWastewater",
+  county:  "COUNTY",
+  subdiv:  "Subdivision",
+  unit:    "Unit",
+  oid:     "OBJECTID",
+  acre:    "Lot_Acreage",     // used by the symbology's placeholder-parcel match
+  area:    "Shape__Area"      // square feet (state plane); popup converts to acres
+};
+
+/* Category selectors. Adding a sixth filter = one more line. */
+const FILTERS = [
+  { key:"county", field:F.county, label:"County" },
+  { key:"lua",    field:F.lua,    label:"Utilities" },
+  { key:"status", field:F.status, label:"Parcel Status" },
+  { key:"subdiv", field:F.subdiv, label:"Subdivision" },
+  { key:"unit",   field:F.unit,   label:"Unit" }
+];
+
+const NON_RES = ["Other","Greenspace","Greenspace / Drainage","Institutional",
+                 "Commercial","Government","Public ROW","Private ROW","Unknown"];
+
+/* ---- Row info popovers ----------------------------------------------------
+   Two levels of control:
+     ROW_INFO.enabled  — global switch for the whole framework
+     row.infoOn        — optional per-row override on any row
+   A row shows its (i) button when it has `info` text AND either:
+     • its own infoOn === true            (works even with the global switch
+                                           off — useful for piloting one row)
+     • or ROW_INFO.enabled === true and the row hasn't set infoOn:false
+   Truth table:  global off + row unset → hidden;  global off + infoOn:true →
+   shown;  global on + row unset → shown;  global on + infoOn:false → hidden.
+   Texts are pre-written on every row; edit freely. */
+const ROW_INFO = { enabled: false };
+
+/* Each parcel is normalized to: {lua, status, w, s, mw, ms, county, subdiv, unit}
+   Rows define match() (which parcels count) and val() (what each contributes).
+   Rows with derive() are computed from other rows after the pass. */
+const CONN_ROWS = [
+  { label:"Existing - Residential", id:"res",
+    match:p => p.lua==="FORU" && p.status==="Improved",
+    val:p => [p.w, p.s],
+    info:"Water and sewer connections on improved (built) residential parcels served by Fair Oaks Ranch Utilities.", infoOn:false },
+
+  { label:"Existing - Non-Residential", id:"nonres",
+    match:p => p.lua==="FORU" && NON_RES.includes(p.status),
+    val:p => [p.w, p.s],
+    info:"Connections on FORU-served commercial, institutional, government, greenspace/drainage, right-of-way, and other non-residential parcels.", infoOn:false },
+
+  { label:"Permitted (New Homes)", id:"perm",
+    match:p => p.lua==="FORU" && p.status==="Permitted",
+    val:p => [p.w, p.s],
+    info:"Connections on FORU-served parcels with an active building permit.", infoOn:false },
+
+  { label:"Vacant (No Permit)", id:"vac",
+    match:p => p.lua==="FORU" && p.status==="Vacant",
+    val:p => [p.w, p.s],
+    info:"Connections already assigned to vacant FORU-served parcels that have no active permit.", infoOn:false },
+
+  { label:"Total", id:"total", cls:"total",
+    derive:r => [ r.res[0]+r.nonres[0]+r.perm[0]+r.vac[0],
+                  r.res[1]+r.nonres[1]+r.perm[1]+r.vac[1] ],
+    info:"Sum of the four categories above — all connections in service or assigned today.", infoOn:false },
+
+  { label:"Future (Reserved)", id:"resv",
+    match:p => p.lua==="FORU" && p.status==="Reserved" && (p.w>=1 || p.s>=1),
+    val:p => [p.w, p.s],
+    info:"Connections on parcels reserved for future development.", infoOn:false },
+
+  { label:"Future (Planned)*", id:"plan",
+    match:p => p.lua==="FORU",
+    val:p => [ p.mw>0 ? Math.max(p.mw-p.w,0) : 0,
+               p.ms>0 ? Math.max(p.ms-p.s,0) : 0 ],
+    info:"Additional connections anticipated by the utility master plan beyond what exists today (master plan minus current, per parcel).", infoOn:false },
+
+  { label:"Future Total", id:"future", cls:"subtotal",
+    derive:r => [ r.resv[0]+r.plan[0], r.resv[1]+r.plan[1] ],
+    info:"Future (Reserved) plus Future (Planned) — all connections still to come at full build-out.", infoOn: true },
+
+  /* Explicit build-out formula: connected today ÷ ultimate connections.
+     Adjust the denominator here if your intended definition differs —
+     it is now visible instead of buried in a dashboard "reference". */
+  { label:"BUILD OUT (%)", id:"build", cls:"buildout", pct:true,
+    derive:r => {
+      const num = i => r.res[i]+r.nonres[i]+r.perm[i];
+      const den = i => num(i) + r.vac[i] + r.resv[i] + r.plan[i];
+      return [ den(0) ? num(0)/den(0) : 0, den(1) ? num(1)/den(1) : 0 ];
+    },
+    info:"Connections serving developed parcels today as a share of all connections expected at full build-out.", infoOn:true }
+];
+
+/* Provider table: columns × rows, parcel counts. */
+const PROVIDER_COLS = [
+  { label:"SAWS",                     match:p => p.lua==="SAWS" },
+  { label:"Enchanted Oaks",           match:p => p.lua==="Enchanted Oaks" },
+  { label:"Private Well / No Provider", match:p => p.lua==="Private" }
+];
+const PROVIDER_ROWS = [
+  { label:"Existing",          statuses:["Improved"],
+    info:"Count of improved (built) parcels served by each provider.", infoOn:false },
+  { label:"Permitted",         statuses:["Permitted"],
+    info:"Count of parcels with an active building permit in each provider's service area.", infoOn:false },
+  { label:"Vacant (No Permit)",statuses:["Vacant"],
+    info:"Count of vacant, unpermitted parcels in each provider's service area.", infoOn:false },
+  { label:"Total", cls:"total",statuses:["Improved","Permitted","Vacant"],
+    info:"All improved, permitted, and vacant parcels for each provider.", infoOn:false }
+];
+
+/* Renderer classes, grouped to match the published legend.
+   Each entry: [expression value, legend label, fill color].
+   "Utilities Offered" is the classification fallback (the original
+   expression's final `return "Other"`, relabeled): FORU-area parcels with
+   no standard connection profile — e.g. Government parcels, developed lots
+   with zero recorded connections, Reserved lots without water. */
+const RENDER_GROUPS = [
+  { heading:"Fair Oaks Ranch Utilities", classes:[
+    ["Water Only",                  "Water Only",                  "#56a0d3"],
+    ["Commercial (Water Only)",     "Commercial (Water Only)",     "#a96bae"],
+    ["Water & Sewer",               "Water & Sewer",               "#e98a3c"],
+    ["Commercial (Water & Sewer)",  "Commercial (Water & Sewer)",  "#2e7d32"],
+    ["Non-Residential with Service","Non-Residential with Service","#bfbfbf"],
+    ["Multiple Connections",        "Multiple Connections",        "#7b2fbe"],
+    ["Utilities Offered",           "Utilities Offered",           "#ede07a"],
+    ["Not Serviced By A Utility",   "Not Serviced By A Utility",   "#c4706b"],
+    ["R.O.W.",                      "R.O.W.",                      "#ffffff"]
+  ]},
+  { heading:"Other Utilities", classes:[
+    ["San Antonio Water System",    "San Antonio Water System",    "#4a4a4a"],
+    ["Enchanted Oaks Utilities",    "Enchanted Oaks Utilities",    "#8c8c8c"],
+    ["Non-Residential No Service",  "Non-Residential No Service",  "#7cbf8c"]
+  ]},
+  { heading:"Undeveloped Areas to be served by FORU", classes:[
+    ["Reserved",                    "Reserved",                    "#e9a9c9"],
+    ["Future Connections",          "Future Connections*",         "#b5524d"]
+  ]}
+];
+
+/* Faithful optimization of the dashboard classification expression:
+   same output for every input, ~1/3 the branches, one block per status.
+   Deliberately NO Trim()/DefaultValue() so NULL and whitespace behave
+   exactly like the original. Verify anytime with debugLUA.verifySymbology().
+   (Note: Arcade identifiers are case-insensitive, so the original's
+   "Water ==1" branch was never broken in AGOL — only a JS port would care.) */
+const RENDER_EXPR = `
+var water  = $feature.${F.water};
+var sewer  = $feature.${F.sewer};
+var lua    = $feature.${F.lua};
+var status = $feature.${F.status};
+
+// ---- provider / status precedence (original branch order preserved) ----
+if (lua == "SAWS") return "San Antonio Water System";
+if (status == "Unknown") {
+  // one placeholder parcel maps to Future Connections; the rest, Water Only
+  // TODO: replace the float acreage match with the parcel's OBJECTID or a flag field
+  return IIf($feature.${F.acre} == 0.14804500819488875,
+             "Future Connections", "Water Only");
+}
+if (status == "Public ROW" || status == "Private ROW") return "R.O.W.";
+if (lua == "Enchanted Oaks") return "Enchanted Oaks Utilities";
+if (lua == "Private")        return "Not Serviced By A Utility";
+if (lua != "FORU")           return "Utilities Offered";
+
+// ---- FORU parcels: one block per status ----
+if (status == "Undeveloped") return "Future Connections";
+
+if (status == "Improved") {
+  if (water > 1 || sewer > 1)   return "Multiple Connections";
+  if (water == 1 && sewer == 1) return "Water & Sewer";
+  if (water == 1 && sewer <= 0) return "Water Only";
+  return "Utilities Offered";
+}
+if (status == "Commercial") {
+  if (water == 1 && sewer <= 0) return "Commercial (Water Only)";
+  if (water == 1 && sewer == 1) return "Commercial (Water & Sewer)";
+  if (water > 1 || sewer > 1)   return "Multiple Connections";
+  return "Utilities Offered";
+}
+if (status == "Permitted") {
+  if (water == 1 && sewer <= 0) return "Water Only";
+  if (water == 1 && sewer == 1) return "Water & Sewer";
+  return "Utilities Offered";
+}
+if (status == "Vacant") {
+  if (water == 1 && sewer == 1) return "Water & Sewer";
+  if (water == 1 && sewer <= 0) return "Water Only";
+  return "Utilities Offered";
+}
+if (status == "Reserved") {
+  return IIf(water >= 1 && sewer >= 0, "Reserved", "Utilities Offered");
+}
+if (status == "Greenspace") {
+  if (water >= 1 || sewer >= 1) return "Non-Residential with Service";
+  if (water <= 0 && sewer <= 0) return "Non-Residential No Service";
+  return "Utilities Offered";   // only reachable with NULL connection values
+}
+if (status == "Other") {
+  return IIf(water >= 1 || sewer >= 1,
+             "Non-Residential with Service", "Utilities Offered");
+}
+if (status == "Institutional") {
+  if (water >= 1 || sewer >= 1) return "Non-Residential with Service";
+  if (water == 0 || sewer == 0) return "Non-Residential No Service";
+  return "Utilities Offered";   // only reachable with NULL connection values
+}
+return "Utilities Offered";     // Government + any unlisted status
+`;
+
+/* =======================================================================
+   APP — you should not need to edit below this line to add rows/fields.
+   ======================================================================= */
+require([
+  "esri/Map","esri/views/MapView","esri/layers/FeatureLayer",
+  "esri/widgets/Legend","esri/widgets/Expand"
+], (Map, MapView, FeatureLayer, Legend, Expand) => {
+
+  const layer = new FeatureLayer({
+    portalItem:{ id: PARCELS_ITEM_ID },
+    layerId: PARCELS_LAYER_ID,
+    title: "Utility Service",
+    outFields: Object.values(F),
+    renderer: {
+      type:"unique-value",
+      valueExpression: RENDER_EXPR,
+      valueExpressionTitle: "Utility Service",
+      defaultSymbol: sym("#3f3f3f"),
+      uniqueValueGroups: RENDER_GROUPS.map(g => ({
+        heading: g.heading,
+        classes: g.classes.map(([value,label,color]) =>
+          ({ label, values:[value], symbol: sym(color) }))
+      }))
+    },
+    popupTemplate:{
+      title: "{" + F.address + "}  <br>  Unit {" + F.unit + "}",
+      expressionInfos:[{
+        name:"acres",
+        title:"Acreage",
+        // Shape__Area is in square feet (state plane); 43,560 sq ft = 1 acre
+        expression:"Text($feature." + F.area + " / 43560, '#,##0.00') + ' acres'"
+      }],
+      content:[{ type:"fields", fieldInfos:[
+        { fieldName:F.lua,    label:"Utility (LUA)" },
+        { fieldName:F.status, label:"Parcel Status" },
+        { fieldName:"expression/acres", label:"Acreage" },
+        { fieldName:F.water,  label:"Water Connections" },
+        { fieldName:F.sewer,  label:"Sewer Connections" },
+        { fieldName:F.masterW,label:"Master Plan Water" },
+        { fieldName:F.masterS,label:"Master Plan Wastewater" }
+      ]}]
+    }
+  });
+
+  function sym(color){
+    return { type:"simple-fill", color, outline:{ color:"#192737", width:.4 } };
+  }
+
+  const view = new MapView({
+    container:"viewDiv",
+    map:new Map({ basemap:"gray-vector", layers:[layer] }),
+    center:[-98.64,29.75], zoom:12,   // safe fallback
+    constraints:{ snapToZoom:false }
+  });
+
+  view.ui.add(new Expand({
+    view,
+    content: new Legend({ view }),
+    expandTooltip: "Legend",
+    expanded: false
+  }), "top-right");
+
+  // Center on the visible parcels layer (never fullExtent on invisible layers)
+  layer.when(() =>
+    layer.queryExtent().then(r => r.extent && view.goTo(r.extent.expand(1.1)))
+  ).catch(()=>{});
+
+  /* ---------------- data load (attributes only, paginated) ------------ */
+  let parcels = [];
+  const statusEl = document.getElementById("status");
+
+  async function loadParcels(){
+    statusEl.textContent = "Loading parcel data…";
+    statusEl.classList.remove("err");
+    document.getElementById("refresh").disabled = true;
+    try{
+      await layer.load();
+      // Reload must see the whole layer, not the currently filtered map
+      layer.definitionExpression = null;
+      const out = [];
+      const q = layer.createQuery();
+      q.where = "1=1";
+      q.outFields = Object.values(F);
+      q.returnGeometry = false;
+      q.orderByFields = [F.oid];   // stable paging order
+      q.num = 2000;
+      q.start = 0;
+      const clean = v => v == null ? "" : String(v).trim();
+      const dirty = {};                     // fields containing untrimmed values
+      const note = (name, raw) => {
+        if (raw != null && String(raw) !== clean(raw)) dirty[name] = (dirty[name]||0)+1;
+      };
+      while (true){
+        const fs = await layer.queryFeatures(q);
+        for (const g of fs.features){
+          const a = g.attributes;
+          note("LUA", a[F.lua]); note("status", a[F.status]);
+          note("county", a[F.county]); note("subdiv", a[F.subdiv]); note("unit", a[F.unit]);
+          out.push({
+            lua:    clean(a[F.lua]),
+            status: clean(a[F.status]),
+            w:  a[F.water]   ?? 0,
+            s:  a[F.sewer]   ?? 0,
+            mw: a[F.masterW] ?? 0,
+            ms: a[F.masterS] ?? 0,
+            acre: a[F.acre],
+            county: clean(a[F.county]),
+            subdiv: clean(a[F.subdiv]),
+            unit:   clean(a[F.unit])
+          });
+        }
+        if (!fs.exceededTransferLimit || fs.features.length === 0) break;
+        q.start += fs.features.length;   // advance by what the server actually
+                                         // returned — maxRecordCount may be
+                                         // smaller than the requested page size
+      }
+      if (Object.keys(dirty).length)
+        console.warn("Untrimmed values found (fix at the source with Trim()):", dirty);
+      parcels = out;
+
+      // Sanity check: did we load every record the service has?
+      let serverCount = null;
+      try { serverCount = await layer.queryFeatureCount({ where:"1=1" }); } catch(_){}
+      const short = serverCount != null && serverCount !== parcels.length;
+      if (short) console.warn(`Loaded ${parcels.length} of ${serverCount} records — tables would be wrong; check pagination/maxRecordCount.`);
+
+      // Console access for troubleshooting, e.g.:
+      // debugLUA.parcels.filter(p => p.status==="Vacant" && p.lua==="SAWS")
+      // debugLUA.verifySymbology()  -> category counts to compare with the legend
+      window.debugLUA = { parcels, F, selections: () => selections, verifySymbology };
+
+      buildFilterOptions();
+      applyAndRender();
+      statusEl.textContent =
+        `${parcels.length.toLocaleString()} parcels` +
+        (short ? ` of ${serverCount.toLocaleString()} on server (INCOMPLETE)` : "") +
+        ` · updated ${new Date().toLocaleTimeString()}`;
+      statusEl.classList.toggle("err", short);
+    }catch(e){
+      console.error(e);
+      statusEl.textContent = "Couldn't load the parcel layer. Check the item ID / sharing, then Refresh.";
+      statusEl.classList.add("err");
+    }finally{
+      document.getElementById("refresh").disabled = false;
+    }
+  }
+
+  /* JS mirror of RENDER_EXPR, for verifying the symbology against the
+     legend counts. Differences from the live Arcade: status/LUA are trimmed
+     and NULL connections read as 0 here — so if the counts diverge from the
+     legend, suspect whitespace or NULLs in the source data. */
+  function classify(p){
+    const {w:water, s:sewer, lua, status} = p;
+    if (lua === "SAWS") return "San Antonio Water System";
+    if (status === "Unknown")
+      return p.acre === 0.14804500819488875 ? "Future Connections" : "Water Only";
+    if (status === "Public ROW" || status === "Private ROW") return "R.O.W.";
+    if (lua === "Enchanted Oaks") return "Enchanted Oaks Utilities";
+    if (lua === "Private")        return "Not Serviced By A Utility";
+    if (lua !== "FORU")           return "Utilities Offered";
+    if (status === "Undeveloped") return "Future Connections";
+    if (status === "Improved"){
+      if (water > 1 || sewer > 1)     return "Multiple Connections";
+      if (water === 1 && sewer === 1) return "Water & Sewer";
+      if (water === 1 && sewer <= 0)  return "Water Only";
+      return "Utilities Offered";
+    }
+    if (status === "Commercial"){
+      if (water === 1 && sewer <= 0)  return "Commercial (Water Only)";
+      if (water === 1 && sewer === 1) return "Commercial (Water & Sewer)";
+      if (water > 1 || sewer > 1)     return "Multiple Connections";
+      return "Utilities Offered";
+    }
+    if (status === "Permitted"){
+      if (water === 1 && sewer <= 0)  return "Water Only";
+      if (water === 1 && sewer === 1) return "Water & Sewer";
+      return "Utilities Offered";
+    }
+    if (status === "Vacant"){
+      if (water === 1 && sewer === 1) return "Water & Sewer";
+      if (water === 1 && sewer <= 0)  return "Water Only";
+      return "Utilities Offered";
+    }
+    if (status === "Reserved")
+      return (water >= 1 && sewer >= 0) ? "Reserved" : "Utilities Offered";
+    if (status === "Greenspace"){
+      if (water >= 1 || sewer >= 1)   return "Non-Residential with Service";
+      return "Non-Residential No Service";
+    }
+    if (status === "Other")
+      return (water >= 1 || sewer >= 1) ? "Non-Residential with Service" : "Utilities Offered";
+    if (status === "Institutional"){
+      if (water >= 1 || sewer >= 1)   return "Non-Residential with Service";
+      return "Non-Residential No Service";
+    }
+    return "Utilities Offered";
+  }
+
+  function verifySymbology(){
+    const counts = {};
+    for (const p of parcels){
+      const c = classify(p);
+      counts[c] = (counts[c] || 0) + 1;
+    }
+    console.table(counts);
+    console.log("Compare these against the legend item counts in Map Viewer/Pro.");
+    return counts;
+  }
+
+  /* ---------------- multi-select filters ------------------------------ */
+  const selections = {};   // key -> Set of selected values (empty = All)
+  const selects = {};
+
+  class MultiSelect {
+    constructor(cfg, host){
+      this.cfg = cfg;
+      selections[cfg.key] = new Set();
+      this.root = document.createElement("div");
+      this.root.className = "msel";
+      this.root.innerHTML = `
+        <button type="button" aria-haspopup="listbox">
+          <span class="lbl">${cfg.label}</span><span class="val">All</span>
+        </button>
+        <div class="panel">
+          <input type="search" placeholder="Search…" aria-label="Search ${cfg.label}">
+          <div class="opts"></div>
+        </div>`;
+      host.appendChild(this.root);
+      this.btn = this.root.querySelector("button");
+      this.valEl = this.root.querySelector(".val");
+      this.optsEl = this.root.querySelector(".opts");
+      this.search = this.root.querySelector("input");
+      this.values = [];
+      this.btn.addEventListener("click", () => {
+        document.querySelectorAll(".msel.open").forEach(m => m!==this.root && m.classList.remove("open"));
+        this.root.classList.toggle("open");
+        if (this.root.classList.contains("open")) this.search.focus();
+      });
+      this.search.addEventListener("input", () => this.renderOptions());
+    }
+    setValues(values){
+      this.values = values;
+      // drop selections that no longer exist
+      const sel = selections[this.cfg.key];
+      [...sel].forEach(v => { if(!values.includes(v)) sel.delete(v); });
+      this.renderOptions();
+      this.refreshLabel();
+    }
+    renderOptions(){
+      const term = this.search.value.toLowerCase();
+      const sel = selections[this.cfg.key];
+      const shown = this.values.filter(v => v.toLowerCase().includes(term));
+      this.optsEl.innerHTML = "";
+      const all = document.createElement("label");
+      all.className = "all";
+      all.innerHTML = `<input type="checkbox" ${sel.size===0?"checked":""}> Select all`;
+      all.querySelector("input").addEventListener("change", () => {
+        sel.clear(); this.renderOptions(); this.refreshLabel(); applyAndRender();
+      });
+      this.optsEl.appendChild(all);
+      for (const v of shown){
+        const l = document.createElement("label");
+        l.innerHTML = `<input type="checkbox" ${sel.has(v)?"checked":""}> ${esc(v || "(blank)")}`;
+        l.querySelector("input").addEventListener("change", e => {
+          e.target.checked ? sel.add(v) : sel.delete(v);
+          this.refreshLabel(); applyAndRender();
+        });
+        this.optsEl.appendChild(l);
+      }
+    }
+    refreshLabel(){
+      const n = selections[this.cfg.key].size;
+      this.valEl.textContent = n===0 ? "All" : n===1 ? [...selections[this.cfg.key]][0] : `${n} selected`;
+    }
+  }
+
+  document.addEventListener("click", e => {
+    if (!e.target.closest(".msel"))
+      document.querySelectorAll(".msel.open").forEach(m => m.classList.remove("open"));
+  });
+
+  const filterHost = document.getElementById("filters");
+  FILTERS.forEach(cfg => selects[cfg.key] = new MultiSelect(cfg, filterHost));
+
+  function buildFilterOptions(){
+    for (const cfg of FILTERS){
+      const key = { county:"county", lua:"lua", status:"status", subdiv:"subdiv", unit:"unit" }[cfg.key];
+      const vals = [...new Set(parcels.map(p => p[key]))].sort((a,b)=>String(a).localeCompare(String(b),undefined,{numeric:true}));
+      selects[cfg.key].setValues(vals.map(String));
+    }
+  }
+
+  /* ---------------- filtering + stats --------------------------------- */
+  function passes(p){
+    for (const cfg of FILTERS){
+      const sel = selections[cfg.key];
+      if (sel.size && !sel.has(String(p[cfg.key]))) return false;
+    }
+    return true;
+  }
+
+  function applyAndRender(){
+    // Map: build a definitionExpression from the same selections
+    const clauses = [];
+    const lit = (field, v) => {
+      const f = (layer.fields || []).find(x => x.name.toLowerCase() === field.toLowerCase());
+      return (!f || f.type === "string")
+        ? `'${String(v).replace(/'/g,"''")}'`
+        : String(v);
+    };
+    for (const cfg of FILTERS){
+      const sel = selections[cfg.key];
+      if (sel.size){
+        const list = [...sel].map(v => lit(cfg.field, v)).join(",");
+        clauses.push(`${cfg.field} IN (${list})`);
+      }
+    }
+    layer.definitionExpression = clauses.join(" AND ") || null;
+
+    // Tables: recompute in memory (instant, always consistent with the map)
+    const filtered = parcels.filter(passes);
+    renderConnTable(filtered);
+    renderProviderTable(filtered);
+  }
+
+  function renderConnTable(rows_src){
+    const results = {};
+    for (const row of CONN_ROWS){
+      if (row.derive) continue;
+      let w=0, s=0;
+      for (const p of rows_src){
+        if (row.match(p)){ const [a,b] = row.val(p); w+=a; s+=b; }
+      }
+      results[row.id] = [w,s];
+    }
+    for (const row of CONN_ROWS)
+      if (row.derive) results[row.id] = row.derive(results);
+
+    const tbody = document.querySelector("#connTable tbody");
+    tbody.innerHTML = "";
+    for (const row of CONN_ROWS){
+      const [w,s] = results[row.id];
+      const tr = document.createElement("tr");
+      if (row.cls) tr.className = row.cls;
+      tr.innerHTML = `<td>${esc(row.label)}</td>` +
+        [w,s].map(v => row.pct
+          ? `<td class="num">${Math.round(v*100)}%<div class="bar"><i style="width:${Math.min(v*100,100)}%"></i></div></td>`
+          : `<td class="num">${Math.round(v).toLocaleString()}</td>`
+        ).join("");
+      attachInfo(tr.firstElementChild, row);
+      tbody.appendChild(tr);
+    }
+  }
+
+  function renderProviderTable(rows_src){
+    const head = document.getElementById("providerHead");
+    head.innerHTML = "<th></th>" + PROVIDER_COLS.map(c=>`<th>${esc(c.label)}</th>`).join("");
+    const tbody = document.querySelector("#providerTable tbody");
+    tbody.innerHTML = "";
+    for (const row of PROVIDER_ROWS){
+      const tr = document.createElement("tr");
+      if (row.cls) tr.className = row.cls;
+      tr.innerHTML = `<td>${esc(row.label)}</td>` + PROVIDER_COLS.map(col => {
+        const n = rows_src.filter(p => col.match(p) && row.statuses.includes(p.status)).length;
+        return `<td class="num">${n.toLocaleString()}</td>`;
+      }).join("");
+      attachInfo(tr.firstElementChild, row);
+      tbody.appendChild(tr);
+    }
+  }
+
+  /* ---------------- row info popovers (see ROW_INFO in CONFIG) --------- */
+  let infoPop = null;
+  function closeInfo(){
+    if (!infoPop) return;
+    infoPop.remove(); infoPop = null;
+    document.querySelectorAll('.info-btn[aria-expanded="true"]')
+      .forEach(b => b.setAttribute("aria-expanded","false"));
+  }
+  function attachInfo(td, row){
+    const show = row.info &&
+      (row.infoOn === true || (ROW_INFO.enabled && row.infoOn !== false));
+    if (!show) return;
+    const b = document.createElement("button");
+    b.className = "info-btn";
+    b.type = "button";
+    b.textContent = "i";
+    b.title = "About this row";
+    b.setAttribute("aria-expanded","false");
+    b.addEventListener("click", e => {
+      e.stopPropagation();
+      const wasOpen = b.getAttribute("aria-expanded") === "true";
+      closeInfo();
+      if (wasOpen) return;
+      infoPop = document.createElement("div");
+      infoPop.className = "info-pop";
+      infoPop.innerHTML = `<b>${esc(row.label)}</b><br>${esc(row.info)}`;
+      document.body.appendChild(infoPop);
+      const r = b.getBoundingClientRect();
+      infoPop.style.left = Math.max(8, Math.min(r.left, innerWidth - infoPop.offsetWidth - 12)) + "px";
+      infoPop.style.top  = (r.bottom + 6 + scrollY) + "px";
+      b.setAttribute("aria-expanded","true");
+    });
+    td.appendChild(b);
+  }
+  document.addEventListener("click", e => {
+    if (!e.target.closest(".info-pop") && !e.target.closest(".info-btn")) closeInfo();
+  });
+
+  function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
+
+  document.getElementById("refresh").addEventListener("click", loadParcels);
+  loadParcels();
+});
+</script>
+</body>
+</html>
