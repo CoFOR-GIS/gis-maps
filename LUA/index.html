@@ -1,5 +1,4 @@
 <!DOCTYPE html>
-<!-- lua-dashboard · v1.1.0 (2026-08-14) · keep in sync with APP_META and STATE.md -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -20,7 +19,9 @@
     --brick:#a5514c;
     --brick-2:#b25e58;
     --line:rgba(242,236,216,.14);
-    font-size:15px;
+    /* Text size — set from the FONT block in <head>; these are fallbacks */
+    --fs-base:15px; --fs-header:1; --fs-labels:1; --fs-numbers:1;
+    font-size:var(--fs-base);
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body{height:100%}
@@ -36,19 +37,19 @@
     display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;
     padding:.65rem 1rem;border-bottom:1px solid var(--line);
   }
-  .brand h1{font-family:"DM Serif Display",serif;font-weight:400;font-size:1.35rem;line-height:1.1}
-  .brand p{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--olive)}
+  .brand h1{font-family:"DM Serif Display",serif;font-weight:400;font-size:calc(1.35rem * var(--fs-header));line-height:1.1}
+  .brand p{font-size:calc(.72rem * var(--fs-header));letter-spacing:.08em;text-transform:uppercase;color:var(--olive)}
   #filters{display:flex;gap:.5rem;flex-wrap:wrap;margin-left:auto}
 
   .msel{position:relative}
   .msel > button{
-    font:inherit;font-size:.8rem;color:var(--cream);
+    font:inherit;font-size:calc(.8rem * var(--fs-header));color:var(--cream);
     background:var(--navy-2);border:1px solid var(--line);border-radius:4px;
     padding:.4rem .6rem;cursor:pointer;min-width:9rem;text-align:left;
     display:flex;justify-content:space-between;gap:.5rem;align-items:baseline;
   }
   .msel > button:focus-visible{outline:2px solid var(--olive);outline-offset:1px}
-  .msel > button .lbl{color:var(--cream-dim);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase}
+  .msel > button .lbl{color:var(--cream-dim);font-size:calc(.68rem * var(--fs-header));letter-spacing:.06em;text-transform:uppercase}
   .msel .panel{
     position:absolute;z-index:60;top:calc(100% + 4px);left:0;
     width:15rem;max-height:310px;display:none;flex-direction:column;
@@ -57,12 +58,12 @@
   }
   .msel.open .panel{display:flex}
   .msel .panel input[type=search]{
-    font:inherit;font-size:.8rem;color:var(--cream);background:var(--navy-3);
+    font:inherit;font-size:calc(.8rem * var(--fs-header));color:var(--cream);background:var(--navy-3);
     border:none;border-bottom:1px solid var(--line);padding:.5rem .6rem;border-radius:6px 6px 0 0;
   }
   .msel .opts{overflow:auto;padding:.25rem 0}
   .msel label{
-    display:flex;gap:.5rem;align-items:center;font-size:.8rem;
+    display:flex;gap:.5rem;align-items:center;font-size:calc(.8rem * var(--fs-header));
     padding:.3rem .6rem;cursor:pointer;
   }
   .msel label:hover{background:var(--navy-3)}
@@ -70,49 +71,26 @@
   .msel input[type=checkbox]{accent-color:var(--olive)}
 
   #refresh{
-    font:inherit;font-size:.8rem;color:var(--navy);background:var(--olive);
+    font:inherit;font-size:calc(.8rem * var(--fs-header));color:var(--navy);background:var(--olive);
     border:none;border-radius:4px;padding:.4rem .8rem;cursor:pointer;font-weight:500;
   }
   #refresh:disabled{opacity:.5;cursor:wait}
 
   /* ---------- layout ---------- */
-  main{flex:1;display:grid;grid-template-columns:minmax(0,1fr) minmax(430px,46%);min-height:0}
+  main{flex:1;display:grid;grid-template-columns:minmax(0,1fr) minmax(28.7rem,46%);min-height:0}
   #viewDiv{min-height:320px}
   #stats{overflow:auto;padding:1rem 1.25rem;border-left:1px solid var(--line)}
-  .note{font-size:.7rem;font-style:italic;color:var(--cream-dim);margin-bottom:.35rem}
+  .note{font-size:calc(.7rem * var(--fs-labels));font-style:italic;color:var(--cream-dim);margin-bottom:.35rem}
 
   table{width:100%;border-collapse:collapse;margin-bottom:1.6rem}
   th,td{padding:.55rem .6rem;border-bottom:1px solid var(--line);text-align:right}
-  th:first-child,td:first-child{text-align:left;font-size:.8rem;color:var(--cream-dim);width:44%}
-  thead th{font-size:.85rem;font-weight:700;color:var(--cream)}
+  th:first-child,td:first-child{text-align:left;font-size:calc(.8rem * var(--fs-labels));color:var(--cream-dim);width:44%}
+  thead th{font-size:calc(.85rem * var(--fs-labels));font-weight:700;color:var(--cream)}
   td.num{
-    font-size:1.45rem;font-variant-numeric:tabular-nums;letter-spacing:.01em;
+    font-size:calc(1.45rem * var(--fs-numbers));font-variant-numeric:tabular-nums;letter-spacing:.01em;
   }
   tr.total td,tr.subtotal td{border-top:2px solid var(--olive)}
   tr.buildout td{border-bottom:none}
-
-  /* ---------- connection-table section bands ----------
-     Rows carry grp-today / grp-future / grp-buildout from CONN_ROWS[].group.
-     Today's connections band in olive, future connections in slate blue,
-     and Build Out — derived from both — gets a split accent and a blended
-     background. grp-start opens a gap where a new band begins. */
-  #connTable{--grp-future:#6f8fae}
-  #connTable td:first-child{position:relative}
-  #connTable tr[class*="grp-"] td:first-child{padding-left:.9rem}
-  #connTable tr[class*="grp-"] td:first-child::before{
-    content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
-  }
-  #connTable tr.grp-today{background:rgba(141,149,108,.08)}
-  #connTable tr.grp-today td:first-child::before{background:var(--olive)}
-  #connTable tr.grp-future{background:rgba(111,143,174,.11)}
-  #connTable tr.grp-future td:first-child::before{background:var(--grp-future)}
-  #connTable tr.grp-buildout{
-    background:linear-gradient(90deg,rgba(141,149,108,.10),rgba(111,143,174,.13));
-  }
-  #connTable tr.grp-buildout td:first-child::before{
-    background:linear-gradient(180deg,var(--olive) 0 50%,var(--grp-future) 50% 100%);
-  }
-  #connTable tr.grp-start td{border-top:6px solid var(--navy)}
   .bar{position:relative;height:5px;background:var(--navy-3);border-radius:3px;margin-top:.3rem;overflow:hidden}
   .bar i{position:absolute;inset:0;right:auto;background:var(--olive);border-radius:3px;transition:width .5s ease}
 
@@ -122,11 +100,11 @@
   #providerTable tbody tr:nth-child(even){background:var(--brick-2)}
   #providerTable td:first-child{color:var(--cream)}
 
-  #status{font-size:.75rem;color:var(--cream-dim);margin-bottom:.75rem}
+  #status{font-size:calc(.75rem * var(--fs-labels));color:var(--cream-dim);margin-bottom:.75rem}
   #status.err{color:#e2a19c}
 
   /* ---------- popup + widget theming (match app palette) ---------- */
-  .esri-widget, .esri-popup{font-family:"DM Sans",system-ui,sans-serif}
+  .esri-widget, .esri-popup{font-family:"DM Sans",system-ui,sans-serif;font-size:.9333rem}
   .esri-ui .esri-popup, .esri-popup, .esri-features{
     /* Calcite tokens used by the 4.x popup */
     --calcite-color-foreground-1: var(--navy-2);
@@ -147,16 +125,16 @@
 
   /* ---------- row info popovers (framework — enable via ROW_INFO) ---------- */
   .info-btn{
-    font:inherit;width:1.05rem;height:1.05rem;line-height:1;margin-left:.4rem;
+    font:inherit;width:calc(1.05rem * var(--fs-labels));height:calc(1.05rem * var(--fs-labels));line-height:1;margin-left:.4rem;
     border-radius:50%;border:1px solid var(--cream-dim);background:none;
-    color:var(--cream-dim);font-size:.65rem;cursor:pointer;vertical-align:middle;
+    color:var(--cream-dim);font-size:calc(.65rem * var(--fs-labels));cursor:pointer;vertical-align:middle;
   }
   .info-btn:hover,.info-btn[aria-expanded="true"]{border-color:var(--olive);color:var(--olive)}
   #providerTable .info-btn{border-color:rgba(242,236,216,.5);color:var(--cream)}
   .info-pop{
     position:absolute;z-index:80;max-width:20rem;
     background:var(--navy-3);color:var(--cream);border:1px solid var(--olive);
-    border-radius:6px;padding:.7rem .8rem;font-size:.78rem;line-height:1.45;
+    border-radius:6px;padding:.7rem .8rem;font-size:calc(.78rem * var(--fs-labels));line-height:1.45;
     box-shadow:0 10px 28px rgba(0,0,0,.5);
   }
   .info-pop b{color:var(--olive)}
@@ -168,6 +146,64 @@
   }
   @media (prefers-reduced-motion:reduce){ .bar i{transition:none} }
 </style>
+<script>
+/* =======================================================================
+   FONT — text size. Change these numbers to resize the app's text.
+   (Kept in <head>, not in CONFIG below, so it applies before first paint.)
+
+   base     px — master size. Everything scales from it: header, filters,
+            tables, info popovers, map popup and legend. 15 = original.
+   header   × on top of base: title, filter dropdowns, Refresh button
+   labels   × row labels, column headings, status line, info popovers
+   numbers  × the large table figures
+
+   Dial it in live instead of editing blind:
+     Console (F12)  debugLUA.font({ base:17, numbers:1.15 })
+                    → applies instantly, prints a FONT line to paste here.
+                    debugLUA.font()        prints current values
+                    debugLUA.font("reset") back to this block
+     Preview link   .../lua-dashboard/?font-base=17&font-numbers=1.15
+                    → same keys, not saved; useful for letting the
+                      requester compare a couple of sizes
+   Values are clamped (base 10–28 px, multipliers 0.5–2.5).
+   ======================================================================= */
+const FONT = { base:15, header:1, labels:1, numbers:1 };
+
+(() => {
+  const LIMITS = { base:[10,28], header:[.5,2.5], labels:[.5,2.5], numbers:[.5,2.5] };
+  const current = { ...FONT };
+
+  function apply(){
+    const s = document.documentElement.style;
+    s.setProperty("--fs-base",    current.base + "px");
+    s.setProperty("--fs-header",  current.header);
+    s.setProperty("--fs-labels",  current.labels);
+    s.setProperty("--fs-numbers", current.numbers);
+  }
+  function set(vals){
+    for (const k in vals){
+      if (!(k in LIMITS)){ console.warn(`FONT: unknown key "${k}" (use ${Object.keys(LIMITS).join(", ")})`); continue; }
+      const v = parseFloat(vals[k]);
+      if (Number.isFinite(v)) current[k] = Math.min(LIMITS[k][1], Math.max(LIMITS[k][0], v));
+    }
+    apply();
+  }
+
+  // Preview overrides from the URL (?font-base=17&font-labels=1.1 …)
+  const q = new URLSearchParams(location.search), fromUrl = {};
+  for (const k in LIMITS) if (q.has("font-" + k)) fromUrl[k] = q.get("font-" + k);
+  set(fromUrl);
+
+  // Console tuner (the data-load code adds parcels, F, etc. to this object)
+  window.debugLUA = window.debugLUA || {};
+  window.debugLUA.font = arg => {
+    if (arg === "reset"){ Object.assign(current, FONT); apply(); }
+    else if (arg && typeof arg === "object") set(arg);
+    console.log(`const FONT = { base:${current.base}, header:${current.header}, labels:${current.labels}, numbers:${current.numbers} };`);
+    return { ...current };
+  };
+})();
+</script>
 </head>
 <body>
 
@@ -206,12 +242,6 @@
    CONFIG — everything the dashboard displays is defined here.
    Add a row/column/filter by adding an object; the layout renders itself.
    ======================================================================= */
-
-/* Deployment identity. Bump `version` on every published change, mirror it
-   in the HTML comment on line 2, and log the change in STATE.md. Shown in
-   the status line and in the console so any deployed copy self-identifies
-   (compare gis.local vs GitHub Pages at a glance). */
-const APP_META = { app:"lua-dashboard", version:"1.1.0", released:"2026-08-14" };
 
 /* Dashboard-tailored public view (was bd5079b30310433998c6a54652074dd6 —
    make sure Pro comparisons use this same item). */
@@ -263,56 +293,52 @@ const ROW_INFO = { enabled: false };
 
 /* Each parcel is normalized to: {lua, status, w, s, mw, ms, county, subdiv, unit}
    Rows define match() (which parcels count) and val() (what each contributes).
-   Rows with derive() are computed from other rows after the pass.
-   group: "today" | "future" | "buildout" drives the section bands (accent
-   bar + tint per group; a gap opens automatically where the group changes).
-   Build Out is "buildout" because its formula draws on both groups —
-   numerator from today's rows, denominator from today's + future's. */
+   Rows with derive() are computed from other rows after the pass. */
 const CONN_ROWS = [
-  { label:"Existing - Residential", id:"res", group:"today",
+  { label:"Existing - Residential", id:"res",
     match:p => p.lua==="FORU" && p.status==="Improved",
     val:p => [p.w, p.s],
     info:"Water and sewer connections on improved (built) residential parcels served by Fair Oaks Ranch Utilities.", infoOn:false },
 
-  { label:"Existing - Non-Residential", id:"nonres", group:"today",
+  { label:"Existing - Non-Residential", id:"nonres",
     match:p => p.lua==="FORU" && NON_RES.includes(p.status),
     val:p => [p.w, p.s],
     info:"Connections on FORU-served commercial, institutional, government, greenspace/drainage, right-of-way, and other non-residential parcels.", infoOn:false },
 
-  { label:"Permitted (New Homes)", id:"perm", group:"today",
+  { label:"Permitted (New Homes)", id:"perm",
     match:p => p.lua==="FORU" && p.status==="Permitted",
     val:p => [p.w, p.s],
     info:"Connections on FORU-served parcels with an active building permit.", infoOn:false },
 
-  { label:"Vacant (No Permit)", id:"vac", group:"today",
+  { label:"Vacant (No Permit)", id:"vac",
     match:p => p.lua==="FORU" && p.status==="Vacant",
     val:p => [p.w, p.s],
     info:"Connections already assigned to vacant FORU-served parcels that have no active permit.", infoOn:false },
 
-  { label:"Total", id:"total", cls:"total", group:"today",
+  { label:"Total", id:"total", cls:"total",
     derive:r => [ r.res[0]+r.nonres[0]+r.perm[0]+r.vac[0],
                   r.res[1]+r.nonres[1]+r.perm[1]+r.vac[1] ],
     info:"Sum of the four categories above — all connections in service or assigned today.", infoOn:false },
 
-  { label:"Future (Reserved)", id:"resv", group:"future",
+  { label:"Future (Reserved)", id:"resv",
     match:p => p.lua==="FORU" && p.status==="Reserved" && (p.w>=1 || p.s>=1),
     val:p => [p.w, p.s],
     info:"Connections on parcels reserved for future development.", infoOn:false },
 
-  { label:"Future (Planned)*", id:"plan", group:"future",
+  { label:"Future (Planned)*", id:"plan",
     match:p => p.lua==="FORU",
     val:p => [ p.mw>0 ? Math.max(p.mw-p.w,0) : 0,
                p.ms>0 ? Math.max(p.ms-p.s,0) : 0 ],
     info:"Additional connections anticipated by the utility master plan beyond what exists today (master plan minus current, per parcel).", infoOn:false },
 
-  { label:"Future Total", id:"future", cls:"subtotal", group:"future",
+  { label:"Future Total", id:"future", cls:"subtotal",
     derive:r => [ r.resv[0]+r.plan[0], r.resv[1]+r.plan[1] ],
     info:"Future (Reserved) plus Future (Planned) — all connections still to come at full build-out.", infoOn: true },
 
   /* Explicit build-out formula: connected today ÷ ultimate connections.
      Adjust the denominator here if your intended definition differs —
      it is now visible instead of buried in a dashboard "reference". */
-  { label:"BUILD OUT (%)", id:"build", cls:"buildout", group:"buildout", pct:true,
+  { label:"BUILD OUT (%)", id:"build", cls:"buildout", pct:true,
     derive:r => {
       const num = i => r.res[i]+r.nonres[i]+r.perm[i];
       const den = i => num(i) + r.vac[i] + r.resv[i] + r.plan[i];
@@ -362,13 +388,8 @@ const RENDER_GROUPS = [
     ["Non-Residential No Service",  "Non-Residential No Service",  "#7cbf8c"]
   ]},
   { heading:"Undeveloped Areas to be served by FORU", classes:[
-    /* v1.1.0 color tweaks (CIECAM02 analysis — see STATE.md):
-       Reserved  #e9a9c9 -> #e893c9  (was near-identical to the Non-Res
-                                      gray #bfbfbf for red-green CVD, dE 4)
-       Future    #b5524d -> #96322e  (was dE 10 from Not Serviced #c4706b
-                                      for everyone; now dE ~22)            */
-    ["Reserved",                    "Reserved",                    "#e893c9"],
-    ["Future Connections",          "Future Connections*",         "#96322e"]
+    ["Reserved",                    "Reserved",                    "#e9a9c9"],
+    ["Future Connections",          "Future Connections*",         "#b5524d"]
   ]}
 ];
 
@@ -459,12 +480,7 @@ require([
       type:"unique-value",
       valueExpression: RENDER_EXPR,
       valueExpressionTitle: "Utility Service",
-      /* No defaultSymbol (v1.1.0): RENDER_EXPR always ends in a value that
-         exists in RENDER_GROUPS, so the default was never used — but its
-         presence made the Legend widget append an empty "Other" entry.
-         Trade-off: if the expression ever returns an unlisted value, those
-         parcels now draw NOTHING instead of dark gray. A parcel "missing"
-         from the map = add the class to RENDER_GROUPS or fix the data. */
+      defaultSymbol: sym("#3f3f3f"),
       uniqueValueGroups: RENDER_GROUPS.map(g => ({
         heading: g.heading,
         classes: g.classes.map(([value,label,color]) =>
@@ -576,15 +592,16 @@ require([
       // Console access for troubleshooting, e.g.:
       // debugLUA.parcels.filter(p => p.status==="Vacant" && p.lua==="SAWS")
       // debugLUA.verifySymbology()  -> category counts to compare with the legend
-      window.debugLUA = { parcels, F, meta: APP_META, selections: () => selections, verifySymbology };
+      // debugLUA.font({base:17})    -> live text-size tuning (see FONT in <head>)
+      window.debugLUA = Object.assign(window.debugLUA || {},
+        { parcels, F, selections: () => selections, verifySymbology });
 
       buildFilterOptions();
       applyAndRender();
       statusEl.textContent =
         `${parcels.length.toLocaleString()} parcels` +
         (short ? ` of ${serverCount.toLocaleString()} on server (INCOMPLETE)` : "") +
-        ` · updated ${new Date().toLocaleTimeString()}` +
-        ` · v${APP_META.version}`;
+        ` · updated ${new Date().toLocaleTimeString()}`;
       statusEl.classList.toggle("err", short);
     }catch(e){
       console.error(e);
@@ -788,18 +805,10 @@ require([
 
     const tbody = document.querySelector("#connTable tbody");
     tbody.innerHTML = "";
-    let prevGroup = null;
     for (const row of CONN_ROWS){
       const [w,s] = results[row.id];
       const tr = document.createElement("tr");
-      const cls = [];
-      if (row.cls) cls.push(row.cls);
-      if (row.group){
-        cls.push("grp-" + row.group);
-        if (prevGroup !== null && row.group !== prevGroup) cls.push("grp-start");
-      }
-      prevGroup = row.group ?? prevGroup;
-      if (cls.length) tr.className = cls.join(" ");
+      if (row.cls) tr.className = row.cls;
       tr.innerHTML = `<td>${esc(row.label)}</td>` +
         [w,s].map(v => row.pct
           ? `<td class="num">${Math.round(v*100)}%<div class="bar"><i style="width:${Math.min(v*100,100)}%"></i></div></td>`
@@ -867,7 +876,6 @@ require([
 
   function esc(s){ return String(s).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
 
-  console.info(`${APP_META.app} v${APP_META.version} (${APP_META.released})`);
   document.getElementById("refresh").addEventListener("click", loadParcels);
   loadParcels();
 });
