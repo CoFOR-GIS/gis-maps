@@ -1272,11 +1272,22 @@ require([
     ]);
 
     const all = [...points, ...lines, ...polygons];
-    state.allProjects = all.map(f => ({
-      attributes: f.attributes,
-      geometry: f.geometry,
-      geomType: f._geomType
-    }));
+    // One entry per project for stats and the directory. A project can have more than one
+    // feature (e.g. WWTP: 2 points + 1 line); counting each would inflate totals and budget.
+    // Map layers are separate FeatureLayers, so every feature still draws.
+    const seen = new Set();
+    state.allProjects = all
+      .filter(f => {
+        const k = f.attributes.ProjectKey || `${f._geomType}:${f.attributes.OBJECTID}`;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      })
+      .map(f => ({
+        attributes: f.attributes,
+        geometry: f.geometry,
+        geomType: f._geomType
+      }));
 
     return state.allProjects;
   }
@@ -1320,11 +1331,11 @@ require([
       catContainer.appendChild(row);
     });
 
-    // Footer — last sync timestamp
-    const lastUpdated = findMostRecentLastUpdated(projects);
+    // Footer: latest PSR sync (LastSynced, epoch ms), falling back to the latest edit
+    const lastUpdated = findMostRecentSync(projects);
     document.getElementById('stat-footer').textContent = lastUpdated
-      ? "Last sync: " + lastUpdated
-      : "Synced from ClearGov";
+      ? "Project data updated " + lastUpdated
+      : "Project data from Public Works Project Status Reports";
   }
 
   function formatCurrencyFull(n) {
@@ -1334,13 +1345,17 @@ require([
     return "$" + n.toLocaleString();
   }
 
-  function findMostRecentLastUpdated(projects) {
-    const dates = projects
-      .map(p => p.attributes.LastUpdated)
-      .filter(Boolean);
-    if (dates.length === 0) return null;
-    // LastUpdated format: MM/DD/YYYY HH:MM:SS — already a string, take first
-    return dates[0];
+  function findMostRecentSync(projects) {
+    // LastSynced is written by cip_psr_sync.py on every changed feature (epoch ms).
+    // The old ClearGov LastUpdated string field stopped changing in August 2026.
+    let latest = 0;
+    projects.forEach(p => {
+      const a = p.attributes;
+      latest = Math.max(latest, Number(a.LastSynced) || 0, Number(a.EditDate) || 0);
+    });
+    if (!latest) return null;
+    return new Date(latest).toLocaleDateString("en-US",
+      { year: "numeric", month: "long", day: "numeric", timeZone: "America/Chicago" });
   }
 
   // ============================================================================
