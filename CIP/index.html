@@ -1278,7 +1278,9 @@ require([
     const seen = new Set();
     state.allProjects = all
       .filter(f => {
-        const k = f.attributes.ProjectKey || `${f._geomType}:${f.attributes.OBJECTID}`;
+        // ProjectKey is not exposed in the Public View; ProjectName (the PSR title) is unique per project.
+        const a = f.attributes;
+        const k = a.ProjectKey || (a.ProjectName && a.ProjectName.trim().toLowerCase()) || `${f._geomType}:${a.OBJECTID}`;
         if (seen.has(k)) return false;
         seen.add(k);
         return true;
