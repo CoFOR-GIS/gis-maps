@@ -962,7 +962,7 @@ arcgis-map, #map-view {
    (was padded on the wrong side); popup opens by OBJECTID; Current/Completed from
    Lifecycle; popup shows PSR fields (phase, status, next milestone, estimated budget,
    overview, latest update, project page); label font Noto Sans; real logo; mobile
-   starts with stats collapsed.
+   starts with stats collapsed. v2.1.1: zoom finishes before the popup opens.
    ============================================================================ */
 
 require([
@@ -1419,6 +1419,8 @@ require([
     list.innerHTML = "";
 
     document.getElementById('dir-count').textContent = state.filtered.length;
+    const sub = document.querySelector('.directory-subtitle');
+    if (sub) sub.lastChild.textContent = state.filtered.length === 1 ? ' project' : ' projects';
 
     if (state.filtered.length === 0) {
       list.innerHTML = '<div id="directory-empty">No projects match your filters.</div>';
@@ -1492,59 +1494,42 @@ require([
 
     if (!p.geometry || !state.view) return;
 
-    // Determine geometry constructor & target zoom
+    // Zoom first, then open the popup (opening it mid-animation cancels the zoom)
     const view = state.view;
-    let geom;
-
+    let target;
     if (p.geomType === "point") {
-      geom = {
-        type: "point",
-        longitude: p.geometry.x,
-        latitude: p.geometry.y,
-        spatialReference: { wkid: 4326 }
-      };
-      view.goTo({ target: geom, zoom: 17 }, { duration: 800 });
+      target = { target: { type: "point", longitude: p.geometry.x, latitude: p.geometry.y, spatialReference: { wkid: 4326 } }, zoom: 17 };
     } else if (p.geomType === "line") {
-      geom = {
-        type: "polyline",
-        paths: [p.geometry.paths ? p.geometry.paths[0] : []],
-        spatialReference: { wkid: 4326 }
-      };
-      view.goTo({ target: geom }, { duration: 800 }).then(() => {
-        view.zoom = Math.max(view.zoom - 1, 14);
-      });
-    } else if (p.geomType === "polygon") {
-      geom = {
-        type: "polygon",
-        rings: p.geometry.rings,
-        spatialReference: { wkid: 4326 }
-      };
-      view.goTo({ target: geom }, { duration: 800 });
+      target = { target: { type: "polyline", paths: p.geometry.paths || [], spatialReference: { wkid: 4326 } } };
+    } else {
+      target = { target: { type: "polygon", rings: p.geometry.rings || [], spatialReference: { wkid: 4326 } } };
     }
 
-    // Open popup at feature
-    const layer = state.layers[p.geomType];
-    if (layer) {
-      layer.queryFeatures({
+    view.goTo(target, { duration: 800 })
+      .then(() => {
+        if (p.geomType !== "point" && view.zoom > 18) view.zoom = 18;   // don't over-zoom tiny shapes
+      })
+      .catch(() => {})
+      .then(() => {
+        const layer = state.layers[p.geomType];
+        if (!layer) return;
         // OBJECTID always exists; the ClearGov ProjectID is empty on PSR-era projects
-        where: `OBJECTID = ${Number(p.attributes.OBJECTID)}`,
-        outFields: ["*"],
-        returnGeometry: true
-      }).then(result => {
-        if (result.features.length > 0) {
-          view.openPopup({
-            features: result.features,
-            location: result.features[0].geometry.type === "point"
-              ? result.features[0].geometry
-              : result.features[0].geometry.extent.center
-          });
-        }
-      }).catch(err => console.warn("Popup open failed:", err));
-    }
+        return layer.queryFeatures({
+          where: `OBJECTID = ${Number(p.attributes.OBJECTID)}`,
+          outFields: ["*"],
+          returnGeometry: true
+        }).then(result => {
+          if (result.features.length > 0) {
+            const g = result.features[0].geometry;
+            view.openPopup({ features: result.features, location: g.type === "point" ? g : g.extent.center });
+          }
+        });
+      })
+      .catch(err => console.warn("Popup open failed:", err));
   }
 
   // ============================================================================
-  // CENTERING via FOR_Jurisdictional
+  // CENTERING
   // ============================================================================
 
   // Keep features clear of the floating stats card. The directory is its own grid
