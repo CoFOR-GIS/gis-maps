@@ -962,7 +962,7 @@ arcgis-map, #map-view {
    (was padded on the wrong side); popup opens by OBJECTID; Current/Completed from
    Lifecycle; popup shows PSR fields (phase, status, next milestone, estimated budget,
    overview, latest update, project page); label font Noto Sans; real logo; mobile
-   starts with stats collapsed. v2.1.1: zoom finishes before the popup opens.
+   starts with stats collapsed. v2.1.2: directory click queries the feature, zooms, then opens the popup; label placement per geometry type.
    ============================================================================ */
 
 require([
@@ -1130,7 +1130,7 @@ require([
   }
 
   // Labeling — show progress percentage on each feature
-  function buildLabelInfo() {
+  function buildLabelInfo(placement) {
     return [{
       labelExpressionInfo: { expression: "Round($feature.ProgressPercent) + '%'" },
       symbol: {
@@ -1144,7 +1144,7 @@ require([
           weight: "bold"
         }
       },
-      labelPlacement: "above-center",
+      labelPlacement: placement || "above-center",
       minScale: 30000,  // only show when reasonably zoomed in
       maxScale: 0
     }];
@@ -1494,38 +1494,30 @@ require([
 
     if (!p.geometry || !state.view) return;
 
-    // Zoom first, then open the popup (opening it mid-animation cancels the zoom)
+    // Query the feature (real SDK geometry), zoom to it, then open the popup.
+    // Plain-JSON geometries are not reliably autocast by goTo, and opening the popup
+    // mid-animation cancels the zoom.
     const view = state.view;
-    let target;
-    if (p.geomType === "point") {
-      target = { target: { type: "point", longitude: p.geometry.x, latitude: p.geometry.y, spatialReference: { wkid: 4326 } }, zoom: 17 };
-    } else if (p.geomType === "line") {
-      target = { target: { type: "polyline", paths: p.geometry.paths || [], spatialReference: { wkid: 4326 } } };
-    } else {
-      target = { target: { type: "polygon", rings: p.geometry.rings || [], spatialReference: { wkid: 4326 } } };
-    }
-
-    view.goTo(target, { duration: 800 })
-      .then(() => {
-        if (p.geomType !== "point" && view.zoom > 18) view.zoom = 18;   // don't over-zoom tiny shapes
-      })
-      .catch(() => {})
-      .then(() => {
-        const layer = state.layers[p.geomType];
-        if (!layer) return;
-        // OBJECTID always exists; the ClearGov ProjectID is empty on PSR-era projects
-        return layer.queryFeatures({
-          where: `OBJECTID = ${Number(p.attributes.OBJECTID)}`,
-          outFields: ["*"],
-          returnGeometry: true
-        }).then(result => {
-          if (result.features.length > 0) {
-            const g = result.features[0].geometry;
-            view.openPopup({ features: result.features, location: g.type === "point" ? g : g.extent.center });
-          }
+    const layer = state.layers[p.geomType];
+    if (!layer) return;
+    layer.queryFeatures({
+      // OBJECTID always exists; the ClearGov ProjectID is empty on PSR-era projects
+      where: `OBJECTID = ${Number(p.attributes.OBJECTID)}`,
+      outFields: ["*"],
+      returnGeometry: true,
+      outSpatialReference: view.spatialReference
+    }).then(result => {
+      const f = result.features[0];
+      if (!f) return;
+      const g = f.geometry;
+      const target = g.type === "point" ? { target: g, zoom: 17 } : { target: g.extent.clone().expand(1.4) };
+      return view.goTo(target, { duration: 800 })
+        .catch(() => {})
+        .then(() => {
+          if (g.type !== "point" && view.zoom > 18) view.zoom = 18;   // don't over-zoom tiny shapes
+          view.openPopup({ features: [f], location: g.type === "point" ? g : g.extent.center });
         });
-      })
-      .catch(err => console.warn("Popup open failed:", err));
+    }).catch(err => console.warn("Zoom/popup failed:", err));
   }
 
   // ============================================================================
@@ -1665,7 +1657,9 @@ require([
   async function init() {
     // Create Map and MapView directly (imperative pattern — more reliable than web component)
     const popupTemplate = buildPopupTemplate();
-    const labelInfo = buildLabelInfo();
+    const labelInfo = buildLabelInfo("above-center");
+    const lineLabelInfo = buildLabelInfo("center-along");
+    const polyLabelInfo = buildLabelInfo("always-horizontal");
 
     state.layers.point = new FeatureLayer({
       url: POINT_LAYER_URL,
@@ -1679,7 +1673,7 @@ require([
     state.layers.line = new FeatureLayer({
       url: LINE_LAYER_URL,
       renderer: buildLineRenderer(),
-      labelingInfo: labelInfo,
+      labelingInfo: lineLabelInfo,
       popupTemplate: popupTemplate,
       title: "CIP Projects — Lines",
       outFields: ["*"]
@@ -1688,7 +1682,7 @@ require([
     state.layers.polygon = new FeatureLayer({
       url: POLY_LAYER_URL,
       renderer: buildPolygonRenderer(),
-      labelingInfo: labelInfo,
+      labelingInfo: polyLabelInfo,
       popupTemplate: popupTemplate,
       title: "CIP Projects — Polygons",
       outFields: ["*"]
