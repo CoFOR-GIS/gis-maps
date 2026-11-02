@@ -13,6 +13,7 @@ provider.
 - **Private wells (D-017, 2026-11-02):** parcels with `Private_Well = Yes` keep their
   map class but are counted in "Private Well / No Provider" and left out of the FORU
   connection rows. `NULL` means not flagged.
+  The two well fields are used for counting only and are not shown in the public popup.
 
 ## Files
 
