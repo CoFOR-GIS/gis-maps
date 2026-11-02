@@ -263,7 +263,9 @@ const F = {
   unit:    "Unit",
   oid:     "OBJECTID",
   acre:    "Lot_Acreage",     // used by the symbology's placeholder-parcel match
-  area:    "Shape__Area"      // square feet (state plane); popup converts to acres
+  area:    "Shape__Area",     // square feet (state plane); popup converts to acres
+  privWell:"Private_Well",    // D-017: "Yes" = counted as private well (NULL/"No" = not flagged)
+  wellBasis:"Private_Well_Basis" // evidence: Meter analysis (unverified) / Billing verified / Staff confirmed / Owner reported
 };
 
 /* Category selectors. Adding a sixth filter = one more line. */
@@ -291,27 +293,30 @@ const NON_RES = ["Other","Greenspace","Greenspace / Drainage","Institutional",
    Texts are pre-written on every row; edit freely. */
 const ROW_INFO = { enabled: false };
 
-/* Each parcel is normalized to: {lua, status, w, s, mw, ms, county, subdiv, unit}
+/* Each parcel is normalized to: {lua, status, w, s, mw, ms, pw, basis, county, subdiv, unit}
+   pw === "Yes" marks a FORU-area parcel on a private well (D-017): it keeps its
+   map class (Utilities Offered) but is counted in "Private Well / No Provider"
+   and excluded from the FORU connection rows. NULL means not flagged.
    Rows define match() (which parcels count) and val() (what each contributes).
    Rows with derive() are computed from other rows after the pass. */
 const CONN_ROWS = [
   { label:"Existing - Residential", id:"res",
-    match:p => p.lua==="FORU" && p.status==="Improved",
+    match:p => p.lua==="FORU" && p.status==="Improved" && p.pw!=="Yes",
     val:p => [p.w, p.s],
     info:"Water and sewer connections on improved (built) residential parcels served by Fair Oaks Ranch Utilities.", infoOn:false },
 
   { label:"Existing - Non-Residential", id:"nonres",
-    match:p => p.lua==="FORU" && NON_RES.includes(p.status),
+    match:p => p.lua==="FORU" && NON_RES.includes(p.status) && p.pw!=="Yes",
     val:p => [p.w, p.s],
     info:"Connections on FORU-served commercial, institutional, government, greenspace/drainage, right-of-way, and other non-residential parcels.", infoOn:false },
 
   { label:"Permitted (New Homes)", id:"perm",
-    match:p => p.lua==="FORU" && p.status==="Permitted",
+    match:p => p.lua==="FORU" && p.status==="Permitted" && p.pw!=="Yes",
     val:p => [p.w, p.s],
     info:"Connections on FORU-served parcels with an active building permit.", infoOn:false },
 
   { label:"Vacant (No Permit)", id:"vac",
-    match:p => p.lua==="FORU" && p.status==="Vacant",
+    match:p => p.lua==="FORU" && p.status==="Vacant" && p.pw!=="Yes",
     val:p => [p.w, p.s],
     info:"Connections already assigned to vacant FORU-served parcels that have no active permit.", infoOn:false },
 
@@ -351,11 +356,12 @@ const CONN_ROWS = [
 const PROVIDER_COLS = [
   { label:"SAWS",                     match:p => p.lua==="SAWS" },
   { label:"Enchanted Oaks",           match:p => p.lua==="Enchanted Oaks" },
-  { label:"Private Well / No Provider", match:p => p.lua==="Private" }
+  { label:"Private Well / No Provider",
+    match:p => p.lua==="Private" || (p.lua==="FORU" && p.pw==="Yes") }   // D-017
 ];
 const PROVIDER_ROWS = [
   { label:"Existing",          statuses:["Improved"],
-    info:"Count of improved (built) parcels served by each provider.", infoOn:false },
+    info:"Count of improved (built) parcels served by each provider. Private Well / No Provider also includes homes inside the FORU service area whose owners kept a private well (service available, no connection); some are identified from meter records and not yet field-verified.", infoOn:false },
   { label:"Permitted",         statuses:["Permitted"],
     info:"Count of parcels with an active building permit in each provider's service area.", infoOn:false },
   { label:"Vacant (No Permit)",statuses:["Vacant"],
@@ -502,7 +508,9 @@ require([
         { fieldName:F.water,  label:"Water Connections" },
         { fieldName:F.sewer,  label:"Sewer Connections" },
         { fieldName:F.masterW,label:"Master Plan Water" },
-        { fieldName:F.masterS,label:"Master Plan Wastewater" }
+        { fieldName:F.masterS,label:"Master Plan Wastewater" },
+        { fieldName:F.privWell, label:"Private Well" },
+        { fieldName:F.wellBasis,label:"Private Well Basis" }
       ]}]
     }
   });
@@ -568,6 +576,8 @@ require([
             s:  a[F.sewer]   ?? 0,
             mw: a[F.masterW] ?? 0,
             ms: a[F.masterS] ?? 0,
+            pw:    clean(a[F.privWell]),
+            basis: clean(a[F.wellBasis]),
             acre: a[F.acre],
             county: clean(a[F.county]),
             subdiv: clean(a[F.subdiv]),
@@ -594,7 +604,14 @@ require([
       // debugLUA.verifySymbology()  -> category counts to compare with the legend
       // debugLUA.font({base:17})    -> live text-size tuning (see FONT in <head>)
       window.debugLUA = Object.assign(window.debugLUA || {},
-        { parcels, F, selections: () => selections, verifySymbology });
+        { parcels, F, selections: () => selections, verifySymbology,
+          // D-017 reconciliation: provider column = LUA Private + FORU wells, by basis
+          wells: () => {
+            const by = {};
+            parcels.filter(p => p.lua==="FORU" && p.pw==="Yes")
+              .forEach(p => by[p.basis||"(no basis)"] = (by[p.basis||"(no basis)"]||0)+1);
+            return { luaPrivate: parcels.filter(p => p.lua==="Private").length, foruWellsByBasis: by };
+          } });
 
       buildFilterOptions();
       applyAndRender();
