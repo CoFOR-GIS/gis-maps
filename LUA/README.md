@@ -4,12 +4,15 @@ Public web app for the City of Fair Oaks Ranch showing water and sewer
 connection status and build-out projections for every parcel, by utility
 provider.
 
-- **Live app:** https://cofor-gis.github.io/gis-maps/lua-dashboard/
+- **Live app:** https://cofor-gis.github.io/gis-maps/LUA/
 - **Data source:** Parcels public view (AGOL item `3413d6379752460ab3f52b946a6e9095`),
   read-only. Data edits happen on the authoritative layer; this app reflects
   them on load or via the Refresh button. No configuration changes are needed
   here for data updates.
 - **User guide:** [USER_GUIDE.md](USER_GUIDE.md)
+- **Private wells (D-017, 2026-11-02):** parcels with `Private_Well = Yes` keep their
+  map class but are counted in "Private Well / No Provider" and left out of the FORU
+  connection rows. `NULL` means not flagged.
 
 ## Files
 
