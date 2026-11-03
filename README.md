@@ -23,6 +23,7 @@ If the app writes data or requires a login, it belongs in `gis-apps`. If it only
 | Map | Path | Description |
 |---|---|---|
 | Annexation History | [`/AnnexationHistory`](https://cofor-gis.github.io/gis-maps/AnnexationHistory/) | Era-based annexation viewer with time slider, ordinance document links, and address search |
+| Surface Flow Explorer (proof of concept) | [`/SurfaceFlow`](https://cofor-gis.github.io/gis-maps/SurfaceFlow/) | Approximate 3D view of which way rainwater flows: flow paths, low spots, raindrop trace and relative rising-water slider. Not a flood study. |
 
 ---
 

@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Surface Flow Explorer | City of Fair Oaks Ranch</title>
+    <link rel="icon" href="logo.svg" type="image/svg+xml">
+
+    <link rel="stylesheet" href="https://js.arcgis.com/4.31/esri/themes/light/main.css">
+    <script src="https://js.arcgis.com/4.31/"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --bg: #FAF8F4;
+            --bg-card: #FFFFFF;
+            --bg-muted: #F2EFE9;
+            --accent: #1B3A2D;
+            --accent-light: #2D5E47;
+            --accent-wash: rgba(27, 58, 45, 0.06);
+            --accent-border: rgba(27, 58, 45, 0.12);
+            --text: #1B3A2D;
+            --text-secondary: #5A6B62;
+            --text-muted: #8A948E;
+            --border: #E5E1DA;
+            --amber: #C4860B;
+            --amber-bg: rgba(196, 134, 11, 0.10);
+            --water: #1F6FB2;
+            --font-display: 'Playfair Display', Georgia, serif;
+            --font-body: 'DM Sans', -apple-system, sans-serif;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { height: 100%; }
+        body { font-family: var(--font-body); color: var(--text); background: var(--bg); display: flex; flex-direction: column; overflow: hidden; }
+
+        header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: var(--bg-card); border-bottom: 1px solid var(--border); flex: 0 0 auto; }
+        header img { width: 34px; height: 34px; }
+        header h1 { font-family: var(--font-display); font-size: 20px; font-weight: 700; line-height: 1.1; }
+        header .sub { font-size: 12px; color: var(--text-secondary); }
+        header .badge { margin-left: auto; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--amber); background: var(--amber-bg); border: 1px solid rgba(196,134,11,.35); padding: 4px 8px; border-radius: 999px; white-space: nowrap; }
+
+        main { flex: 1 1 auto; display: flex; min-height: 0; }
+        #panel { width: 340px; flex: 0 0 340px; overflow-y: auto; background: var(--bg); border-right: 1px solid var(--border); padding: 14px; display: flex; flex-direction: column; gap: 12px; }
+        #viewDiv { flex: 1 1 auto; position: relative; min-width: 0; }
+
+        .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+        .card h2 { font-family: var(--font-display); font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+        .card p, .card li { font-size: 12.5px; color: var(--text-secondary); line-height: 1.45; }
+        .card ul { padding-left: 16px; }
+        .disclaimer { background: var(--amber-bg); border-color: rgba(196,134,11,.35); }
+        .disclaimer p { color: #6B4E0A; }
+
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font: 600 13px var(--font-body); padding: 8px 12px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; }
+        .btn.secondary { background: var(--bg-card); color: var(--accent); }
+        .btn:disabled { opacity: .5; cursor: default; }
+        .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+
+        label.row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; margin-top: 6px; cursor: pointer; }
+        .slider-row { margin-top: 10px; }
+        .slider-row .lbl { display: flex; justify-content: space-between; font-size: 12.5px; }
+        .slider-row .lbl b { color: var(--accent); }
+        input[type=range] { width: 100%; accent-color: var(--accent); }
+        select { font: 13px var(--font-body); padding: 4px 6px; border-radius: 6px; border: 1px solid var(--border); background: #fff; color: var(--text); }
+
+        #status { font-size: 12px; color: var(--text-secondary); margin-top: 8px; min-height: 16px; }
+        .progress { height: 4px; background: var(--bg-muted); border-radius: 2px; overflow: hidden; margin-top: 6px; display: none; }
+        .progress > div { height: 100%; width: 0; background: var(--water); transition: width .2s; }
+
+        .legend { display: grid; grid-template-columns: 34px 1fr; gap: 4px 8px; align-items: center; font-size: 12px; color: var(--text-secondary); margin-top: 6px; }
+        .sw-line { height: 0; border-top-style: solid; border-radius: 2px; }
+        .sw-box { height: 12px; border-radius: 3px; }
+
+        #dropInfo { font-size: 12.5px; color: var(--text-secondary); margin-top: 6px; }
+        #dropInfo b { color: var(--accent); }
+        .hint { font-size: 11.5px; color: var(--text-muted); margin-top: 6px; }
+
+        #modeChip { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); background: rgba(27,58,45,.92); color: #fff; font-size: 12.5px; padding: 6px 12px; border-radius: 999px; pointer-events: none; display: none; z-index: 5; }
+
+        @media (max-width: 860px) {
+            main { flex-direction: column-reverse; }
+            #panel { width: 100%; flex: 0 0 46%; border-right: 0; border-top: 1px solid var(--border); }
+            header .sub { display: none; }
+        }
+    </style>
+</head>
+<body>
+<header>
+    <img src="logo.svg" alt="City of Fair Oaks Ranch logo">
+    <div>
+        <h1>Surface Flow Explorer</h1>
+        <div class="sub">Which way does rainwater go? An approximate, terrain-based view.</div>
+    </div>
+    <span class="badge" title="Proof of concept, not an engineering product">Approximate &middot; Proof of concept</span>
+</header>
+
+<main>
+    <aside id="panel">
+        <div class="card disclaimer">
+            <p><b>Approximate only.</b> Flow is estimated from ground elevation alone. It ignores storm drains, buildings, fences and rainfall amount. This is <b>not</b> a flood study or a flood determination. For regulatory flood zones, see the FEMA flood map layer below or <a href="https://msc.fema.gov/portal/home" target="_blank" rel="noopener">msc.fema.gov</a>.</p>
+        </div>
+
+        <div class="card">
+            <h2>1. Analyze an area</h2>
+            <p>Calculates the flow network from the elevation data already used for the 3D ground. Runs entirely in your browser.</p>
+            <label class="row">Detail
+                <select id="resSel">
+                    <option value="10">Fast (10 m / 33 ft)</option>
+                    <option value="5" selected>Standard (5 m / 16 ft)</option>
+                    <option value="3">Fine (3 m / 10 ft), small areas</option>
+                </select>
+            </label>
+            <label class="row"><input type="checkbox" id="culvertChk" checked> Let water pass through city culverts</label>
+            <div class="btn-row">
+                <button class="btn" id="runCity" disabled>Whole city</button>
+                <button class="btn secondary" id="runView" disabled>Current view</button>
+            </div>
+            <div class="progress" id="prog"><div></div></div>
+            <div id="status">Loading map&hellip;</div>
+        </div>
+
+        <div class="card">
+            <h2>2. Flow paths</h2>
+            <label class="row"><input type="checkbox" id="streamChk" checked> Show flow paths (arrows point downhill)</label>
+            <div class="slider-row">
+                <div class="lbl"><span>Show paths draining at least</span><b id="streamVal">5 acres</b></div>
+                <input type="range" id="streamSl" min="0" max="100" value="35">
+            </div>
+            <div class="legend">
+                <div class="sw-line" style="border-top-width:2px;border-color:#7FD3F2"></div><div>Small path (under 25 ac)</div>
+                <div class="sw-line" style="border-top-width:3px;border-color:#39A9E0"></div><div>Swale or ditch (25&ndash;250 ac)</div>
+                <div class="sw-line" style="border-top-width:5px;border-color:#1F6FB2"></div><div>Creek (250&ndash;2,500 ac)</div>
+                <div class="sw-line" style="border-top-width:7px;border-color:#123E7A"></div><div>Major creek (over 2,500 ac)</div>
+            </div>
+            <label class="row"><input type="checkbox" id="pondChk" checked> Show low spots where water collects</label>
+            <div class="legend"><div class="sw-box" style="background:linear-gradient(90deg,rgba(255,196,61,.45),rgba(214,120,20,.85))"></div><div>Low spot, shallow to deep</div></div>
+        </div>
+
+        <div class="card">
+            <h2>3. Drop a raindrop</h2>
+            <p>Click <b>Drop a raindrop</b>, then click the map. The animation follows the steepest way downhill.</p>
+            <div class="btn-row">
+                <button class="btn" id="dropBtn" disabled>Drop a raindrop</button>
+                <button class="btn secondary" id="clearDrops" disabled>Clear</button>
+            </div>
+            <div id="dropInfo"></div>
+        </div>
+
+        <div class="card">
+            <h2>4. Rising water (relative)</h2>
+            <p>Shades ground that sits within a given height of the nearest creek (height above nearest drainage). It shows which ground is <i>relatively</i> low and would get wet first. It does not model any particular storm.</p>
+            <label class="row"><input type="checkbox" id="handChk"> Show rising water</label>
+            <div class="slider-row">
+                <div class="lbl"><span>Water above creek level</span><b id="handVal">5 ft</b></div>
+                <input type="range" id="handSl" min="0" max="25" step="0.5" value="5">
+            </div>
+            <div class="slider-row">
+                <div class="lbl"><span>Measure from creeks draining</span><b id="handAreaVal">250 acres</b></div>
+                <input type="range" id="handAreaSl" min="0" max="100" value="55">
+            </div>
+            <div class="legend"><div class="sw-box" style="background:linear-gradient(90deg,rgba(120,190,255,.45),rgba(10,60,160,.85))"></div><div>Shallow to deep (relative)</div></div>
+        </div>
+
+        <div class="card">
+            <h2>Context</h2>
+            <label class="row"><input type="checkbox" id="femaChk"> FEMA flood hazard zones (NFHL)</label>
+            <label class="row"><input type="checkbox" id="culvLyrChk"> City culverts</label>
+            <label class="row"><input type="checkbox" id="boundaryChk" checked> City limits</label>
+            <label class="row">Terrain exaggeration
+                <select id="exagSel">
+                    <option value="1">1&times;</option>
+                    <option value="1.5">1.5&times;</option>
+                    <option value="2" selected>2&times;</option>
+                    <option value="3">3&times;</option>
+                </select>
+            </label>
+            <p class="hint">Elevation: Esri World Elevation (USGS 3DEP lidar where available). Proof of concept, City of Fair Oaks Ranch GIS.</p>
+        </div>
+    </aside>
+
+    <div id="viewDiv"><div id="modeChip">Click the map to drop a raindrop &middot; Esc to cancel</div></div>
+</main>
+
+<!--
+  Hydrology engine. Runs in a Web Worker (created from this text) so the page stays responsive.
+  Pure JavaScript, no dependencies. Grid is row-major, row 0 = north edge.
+  Steps: Priority-Flood+epsilon fill (Barnes et al. 2014) -> D8 steepest descent -> topological flow
+  accumulation -> stream network vectorization -> HAND (height above nearest drainage).
+-->
+<script id="flowWorker" type="text/js-worker">
+"use strict";
+var S = null; // state kept between messages
+
+var DR = [-1,-1, 0, 1, 1, 1, 0,-1];
+var DC = [ 0, 1, 1, 1, 0,-1,-1,-1];
+var DD = [1, Math.SQRT2, 1, Math.SQRT2, 1, Math.SQRT2, 1, Math.SQRT2];
+
+function progress(pct, msg) { self.postMessage({ type: "progress", pct: pct, msg: msg }); }
+
+// Binary min-heap of cell indices keyed by a Float64Array.
+function Heap(cap, key) { this.a = new Int32Array(cap); this.n = 0; this.k = key; }
+Heap.prototype.push = function (i) {
+    var a = this.a, k = this.k, j = this.n++; a[j] = i;
+    while (j > 0) { var p = (j - 1) >> 1; if (k[a[p]] <= k[i]) break; a[j] = a[p]; j = p; }
+    a[j] = i;
+};
+Heap.prototype.pop = function () {
+    var a = this.a, k = this.k, top = a[0], last = a[--this.n], j = 0, n = this.n;
+    if (n === 0) return top;
+    for (;;) {
+        var l = 2 * j + 1; if (l >= n) break;
+        var r = l + 1, m = (r < n && k[a[r]] < k[a[l]]) ? r : l;
+        if (k[a[m]] >= k[last]) break;
+        a[j] = a[m]; j = m;
+    }
+    a[j] = last;
+    return top;
+};
+
+function run(p) {
+    var W = p.W, H = p.H, N = W * H, dem = p.dem, i, r, c, d;
+    var EPS = 1e-4;
+    var fill = new Float64Array(N);   // epsilon-filled, used for directions
+    var plain = new Float32Array(N);  // plain-filled, used for low-spot depth
+    var closed = new Uint8Array(N);
+    var valid = new Uint8Array(N);
+    for (i = 0; i < N; i++) valid[i] = isFinite(dem[i]) ? 1 : 0;
+
+    progress(5, "Filling low spots");
+    var heap = new Heap(N, fill), pit = new Int32Array(N), ph = 0, pt = 0;
+    // Seeds: grid edge cells and cells next to missing data.
+    for (r = 0; r < H; r++) for (c = 0; c < W; c++) {
+        i = r * W + c;
+        if (!valid[i]) { closed[i] = 1; continue; }
+        var edge = (r === 0 || c === 0 || r === H - 1 || c === W - 1);
+        if (!edge) for (d = 0; d < 8; d++) { if (!valid[(r + DR[d]) * W + c + DC[d]]) { edge = true; break; } }
+        if (edge) { fill[i] = dem[i]; plain[i] = dem[i]; closed[i] = 1; heap.push(i); }
+    }
+    var done = 0, tick = Math.max(1, Math.floor(N / 20));
+    while (heap.n > 0 || ph < pt) {
+        var cc = (ph < pt) ? pit[ph++] : heap.pop();
+        if (ph === pt) { ph = 0; pt = 0; }
+        r = (cc / W) | 0; c = cc - r * W;
+        for (d = 0; d < 8; d++) {
+            var rr = r + DR[d], c2 = c + DC[d];
+            if (rr < 0 || rr >= H || c2 < 0 || c2 >= W) continue;
+            var n = rr * W + c2;
+            if (closed[n]) continue;
+            closed[n] = 1;
+            plain[n] = Math.max(dem[n], plain[cc]);
+            if (dem[n] <= fill[cc] + EPS) { fill[n] = fill[cc] + EPS; pit[pt++] = n; }
+            else { fill[n] = dem[n]; heap.push(n); }
+        }
+        if (++done % tick === 0) progress(5 + 35 * done / N, "Filling low spots");
+    }
+    heap = null; pit = null; closed = null;
+
+    progress(42, "Finding flow directions");
+    var down = new Int32Array(N);
+    for (r = 0; r < H; r++) for (c = 0; c < W; c++) {
+        i = r * W + c;
+        if (!valid[i]) { down[i] = -2; continue; }
+        var best = -1, bs = 0;
+        for (d = 0; d < 8; d++) {
+            var r3 = r + DR[d], c3 = c + DC[d];
+            if (r3 < 0 || r3 >= H || c3 < 0 || c3 >= W) continue;
+            var k = r3 * W + c3;
+            if (!valid[k]) continue;
+            var s = (fill[i] - fill[k]) / DD[d];
+            if (s > bs) { bs = s; best = k; }
+        }
+        down[i] = best; // -1 = leaves the analysis area here
+    }
+
+    progress(55, "Accumulating flow");
+    var indeg = new Int32Array(N);
+    for (i = 0; i < N; i++) if (down[i] >= 0) indeg[down[i]]++;
+    var order = new Int32Array(N), oh = 0, ot = 0;
+    for (i = 0; i < N; i++) if (valid[i] && indeg[i] === 0) order[ot++] = i;
+    var acc = new Float32Array(N);
+    var wt = p.weight || null;
+    for (i = 0; i < N; i++) acc[i] = valid[i] ? (wt ? wt[i] : 1) : 0;
+    while (oh < ot) {
+        var u = order[oh++], v = down[u];
+        if (v >= 0) { acc[v] += acc[u]; if (--indeg[v] === 0) order[ot++] = v; }
+    }
+    var nOrder = ot;
+
+    var pond = new Float32Array(N);
+    for (i = 0; i < N; i++) pond[i] = valid[i] ? plain[i] - dem[i] : 0;
+
+    S = { W: W, H: H, N: N, dem: dem, valid: valid, down: down, acc: acc, order: order, nOrder: nOrder, cellM: p.cellM };
+    progress(70, "Tracing flow paths");
+    var net = streams(p.streamAcres);
+    progress(85, "Measuring height above creeks");
+    var hand = handGrid(p.handAcres);
+    progress(100, "Done");
+    return { down: down.slice(), pond: pond, hand: hand, segments: net.segments, nStream: net.nStream };
+}
+
+function areaCells(acres) { return acres * 4046.8564 / (S.cellM * S.cellM); }
+
+function streams(acres) {
+    var W = S.W, N = S.N, down = S.down, acc = S.acc, i, thr = areaCells(acres);
+    var st = new Uint8Array(N), up = new Uint8Array(N), nStream = 0;
+    for (i = 0; i < N; i++) if (S.valid[i] && acc[i] >= thr) { st[i] = 1; nStream++; }
+    for (i = 0; i < N; i++) if (st[i] && down[i] >= 0 && st[down[i]]) { if (up[down[i]] < 255) up[down[i]]++; }
+    var segs = [], cellArea = S.cellM * S.cellM / 4046.8564;
+    for (i = 0; i < N; i++) {
+        if (!st[i] || up[i] === 1) continue; // start at heads (0 upstream) and junctions (2+)
+        var pts = [i % W, (i / W) | 0], cur = i, last = i;
+        for (;;) {
+            var nx = down[cur];
+            if (nx < 0 || !st[nx]) break;
+            pts.push(nx % W, (nx / W) | 0);
+            last = nx;
+            if (up[nx] !== 1) break; // reached a junction: it starts its own segment
+            cur = nx;
+        }
+        if (pts.length >= 4) segs.push({ p: pts, acres: acc[last] * cellArea, out: down[last] < 0 });
+    }
+    return { segments: segs, nStream: nStream };
+}
+
+function handGrid(acres) {
+    var N = S.N, down = S.down, acc = S.acc, dem = S.dem, order = S.order, thr = areaCells(acres);
+    var ref = new Float32Array(N), hand = new Float32Array(N), k, i;
+    for (i = 0; i < N; i++) ref[i] = NaN;
+    for (k = S.nOrder - 1; k >= 0; k--) { // downstream first
+        i = order[k];
+        if (acc[i] >= thr) ref[i] = dem[i];
+        else if (down[i] >= 0) ref[i] = ref[down[i]];
+    }
+    for (i = 0; i < N; i++) { var h = dem[i] - ref[i]; hand[i] = isFinite(h) ? Math.max(0, h) : NaN; }
+    return hand;
+}
+
+self.onmessage = function (e) {
+    var m = e.data;
+    try {
+        if (m.type === "run") {
+            var res = run(m);
+            self.postMessage({ type: "result", res: res }, [res.down.buffer, res.pond.buffer, res.hand.buffer]);
+        } else if (m.type === "streams") {
+            self.postMessage({ type: "streams", segments: streams(m.streamAcres).segments });
+        } else if (m.type === "hand") {
+            var h = handGrid(m.handAcres);
+            self.postMessage({ type: "hand", hand: h }, [h.buffer]);
+        }
+    } catch (err) {
+        self.postMessage({ type: "error", msg: String(err && err.message || err) });
+    }
+};
+</script>
+
+<script>
+/* ========================= CONFIG ========================= */
+const CONFIG = {
+    // Public city services (no sign-in).
+    boundaryUrl: "https://services6.arcgis.com/Cnwpb7mZuifVHE6A/arcgis/rest/services/FOR_Jurisdictional/FeatureServer/0",
+    culvertsUrl: "https://services6.arcgis.com/Cnwpb7mZuifVHE6A/ArcGIS/rest/services/City_of_Fair_Oaks_Ranch_Drainage_Inventory_(Public_View)/FeatureServer/4",
+    femaUrl:     "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer",
+    femaSublayer: 28,
+    // Esri World Elevation (same source as the 3D ground). Public.
+    elevationUrl: "https://elevation3d.arcgis.com/arcgis/rest/services/WorldElevation3D/Terrain3D/ImageServer",
+    startCamera: { position: { longitude: -98.665, latitude: 29.665, z: 5200 }, tilt: 62, heading: 15 },
+    maxCells: 2600000,          // keeps analysis to a few seconds on a typical laptop
+    cityBufferM: 600,           // analysis extends past the city limits so edge effects stay outside
+    viewMaxSideM: 6000,         // "Current view" analysis box, centered on the view
+    pieceM: 90,                 // flow lines are cut into pieces this long so arrows repeat along them
+    culvertBurnM: 1.0,          // culverts are carved this far below the lower culvert end
+    pondMinM: 0.15              // low spots shallower than this are not shown
+};
+
+/* Logarithmic slider helpers (acres). */
+function logAcres(v, lo, hi) { return lo * Math.pow(hi / lo, v / 100); }
+function niceAcres(a) { return a < 10 ? Math.round(a * 2) / 2 : a < 100 ? Math.round(a) : Math.round(a / 10) * 10; }
+function fmtAcres(a) { return niceAcres(a).toLocaleString() + " acres"; }
+const STREAM_RANGE = [1, 500], HAND_RANGE = [25, 5000];
+
+require([
+    "esri/Map", "esri/views/SceneView", "esri/layers/ElevationLayer", "esri/layers/FeatureLayer",
+    "esri/layers/GraphicsLayer", "esri/layers/MapImageLayer", "esri/layers/MediaLayer",
+    "esri/layers/support/ImageElement", "esri/layers/support/ExtentAndRotationGeoreference",
+    "esri/Graphic", "esri/geometry/Extent", "esri/geometry/Polyline", "esri/geometry/Point",
+    "esri/layers/BaseElevationLayer", "esri/identity/IdentityManager", "esri/widgets/Search"
+], function (Map, SceneView, ElevationLayer, FeatureLayer, GraphicsLayer, MapImageLayer, MediaLayer,
+             ImageElement, ExtentAndRotationGeoreference, Graphic, Extent, Polyline, Point,
+             BaseElevationLayer, esriId, Search) {
+
+    // Public app: never show a sign-in dialog.
+    esriId.getCredential = () => Promise.reject(new Error("Auth suppressed"));
+
+    const $ = (id) => document.getElementById(id);
+    const setStatus = (t) => { $("status").textContent = t; };
+    const setProgress = (pct) => {
+        $("prog").style.display = pct == null ? "none" : "block";
+        $("prog").firstElementChild.style.width = (pct || 0) + "%";
+    };
+
+    /* ---------- layers ---------- */
+    const elevation = new ElevationLayer({ url: CONFIG.elevationUrl });
+    const boundary = new FeatureLayer({
+        url: CONFIG.boundaryUrl, title: "City limits", outFields: [],
+        elevationInfo: { mode: "on-the-ground" },
+        renderer: { type: "simple", symbol: { type: "polygon-3d", symbolLayers: [{ type: "fill", material: { color: [0, 0, 0, 0] }, outline: { color: [255, 255, 255, 0.95], size: 2.5 } }] } }
+    });
+    const fema = new MapImageLayer({ url: CONFIG.femaUrl, title: "FEMA NFHL", visible: false, opacity: 0.45, sublayers: [{ id: CONFIG.femaSublayer, visible: true }] });
+    const culvertLyr = new FeatureLayer({
+        url: CONFIG.culvertsUrl, title: "Culverts", visible: false, outFields: [],
+        elevationInfo: { mode: "on-the-ground" },
+        renderer: { type: "simple", symbol: { type: "line-3d", symbolLayers: [{ type: "line", size: 4, material: { color: [255, 90, 60, 1] } }] } }
+    });
+    const pondMedia = new MediaLayer({ title: "Low spots", opacity: 1 });
+    const handMedia = new MediaLayer({ title: "Rising water", opacity: 1, visible: false });
+    const streamLyr = new GraphicsLayer({ title: "Flow paths", elevationInfo: { mode: "on-the-ground" } });
+    const dropLyr = new GraphicsLayer({ title: "Raindrops", elevationInfo: { mode: "relative-to-ground", offset: 1.5 } });
+
+    const map = new Map({ basemap: "hybrid", ground: { layers: [elevation] }, layers: [fema, pondMedia, handMedia, boundary, culvertLyr, streamLyr, dropLyr] });
+    const view = new SceneView({
+        container: "viewDiv", map,
+        camera: CONFIG.startCamera,
+        environment: { lighting: { type: "virtual" }, atmosphereEnabled: true },
+        qualityProfile: "high",
+        popupEnabled: false
+    });
+    view.ui.add(new Search({ view, includeDefaultSources: true, popupEnabled: false }), "top-right");
+
+    // Vertical exaggeration for the 3D ground only (analysis always uses true elevations).
+    function applyExaggeration() {
+        const f = parseFloat($("exagSel").value);
+        map.ground = { layers: [f === 1 ? elevation : exaggerated(f)] };
+    }
+    const exagCache = {};
+    function exaggerated(f) {
+        if (exagCache[f]) return exagCache[f];
+        const L = BaseElevationLayer.createSubclass({
+            load: function () {
+                this._e = new ElevationLayer({ url: CONFIG.elevationUrl });
+                this.addResolvingPromise(this._e.load().then(() => {
+                    this.tileInfo = this._e.tileInfo;
+                    this.spatialReference = this._e.spatialReference;
+                    this.fullExtent = this._e.fullExtent;
+                }));
+            },
+            fetchTile: function (level, row, col, options) {
+                return this._e.fetchTile(level, row, col, options).then((d) => {
+                    for (let i = 0; i < d.values.length; i++) if (d.values[i] !== d.noDataValue) d.values[i] *= f;
+                    return d;
+                });
+            }
+        });
+        return (exagCache[f] = new L());
+    }
+    applyExaggeration();
+    $("exagSel").addEventListener("change", applyExaggeration);
+
+    /* ---------- state ---------- */
+    let grid = null;       // { W, H, cs, xmin, ymax, dem, down, pond, hand, extent }
+    let worker = null;
+    let cityExtent = null;
+
+    view.when(async () => {
+        try {
+            const q = boundary.createQuery(); q.returnGeometry = false; q.outSpatialReference = view.spatialReference;
+            const r = await boundary.queryExtent(q);
+            if (r && r.extent) cityExtent = r.extent;
+        } catch (e) { console.warn("City limits extent unavailable", e); }
+        $("runCity").disabled = !cityExtent;
+        $("runView").disabled = false;
+        setStatus(cityExtent ? "Ready. Choose an area to analyze." : "Ready. City limits unavailable; use Current view.");
+        if (new URLSearchParams(location.search).get("auto") === "1") runAnalysis("city");
+    }, (e) => setStatus("Map failed to load: " + e.message));
+
+    /* ---------- analysis ---------- */
+    $("runCity").onclick = () => runAnalysis("city");
+    $("runView").onclick = () => runAnalysis("view");
+
+    function analysisExtent(kind, cellM) {
+        const sr = view.spatialReference;
+        let ext;
+        if (kind === "city" && cityExtent) {
+            const k = 1 / Math.cos(cityExtent.center.latitude * Math.PI / 180), b = CONFIG.cityBufferM * k;
+            ext = new Extent({ xmin: cityExtent.xmin - b, ymin: cityExtent.ymin - b, xmax: cityExtent.xmax + b, ymax: cityExtent.ymax + b, spatialReference: sr });
+        } else {
+            // A tilted 3D view's extent reaches the horizon; use a box around the point at the screen center.
+            const c = view.center, k = 1 / Math.cos(c.latitude * Math.PI / 180);
+            const viewExt = view.extent;
+            const half = Math.min(CONFIG.viewMaxSideM / 2, Math.max(500, Math.min(viewExt.width, viewExt.height) / k / 2)) * k;
+            ext = new Extent({ xmin: c.x - half, ymin: c.y - half, xmax: c.x + half, ymax: c.y + half, spatialReference: sr });
+        }
+        return ext;
+    }
+
+    async function runAnalysis(kind) {
+        const btns = ["runCity", "runView", "dropBtn"]; btns.forEach((b) => $(b).disabled = true);
+        try {
+            let cellM = parseFloat($("resSel").value);
+            const ext0 = analysisExtent(kind, cellM);
+            const k = 1 / Math.cos(ext0.center.latitude * Math.PI / 180); // Web Mercator scale factor
+            const groundW = ext0.width / k, groundH = ext0.height / k;
+            if ((groundW / cellM) * (groundH / cellM) > CONFIG.maxCells) {
+                cellM = Math.ceil(Math.sqrt(groundW * groundH / CONFIG.maxCells) * 10) / 10;
+            }
+            const cs = cellM * k; // cell size in map units
+            const W = Math.round(ext0.width / cs), H = Math.round(ext0.height / cs);
+            const ext = new Extent({ xmin: ext0.xmin, ymax: ext0.ymax, xmax: ext0.xmin + W * cs, ymin: ext0.ymax - H * cs, spatialReference: ext0.spatialReference });
+
+            setProgress(1); setStatus(`Downloading elevation (${W.toLocaleString()} x ${H.toLocaleString()} cells at ${cellM} m)`);
+            const dem = await sampleDem(ext, W, H, cs, cellM);
+            let burned = 0;
+            if ($("culvertChk").checked) burned = await burnCulverts(dem, ext, W, H, cs);
+
+            grid = { W, H, cs, cellM, xmin: ext.xmin, ymax: ext.ymax, extent: ext, dem: dem.slice() };
+            const res = await workerRun({ type: "run", W, H, dem, cellM, streamAcres: streamAcres(), handAcres: handAcres() });
+            Object.assign(grid, { down: res.down, pond: res.pond, hand: res.hand });
+
+            drawStreams(res.segments);
+            drawPond();
+            drawHand();
+            $("dropBtn").disabled = false;
+            setStatus(`Done: ${(groundW * groundH / 4046.86).toLocaleString(undefined, { maximumFractionDigits: 0 })} acres at ${cellM} m detail` +
+                (burned ? `, ${burned} culvert${burned === 1 ? "" : "s"} carved through.` : "."));
+        } catch (e) {
+            console.error(e);
+            setStatus("Analysis failed: " + (e && e.message || e));
+        } finally {
+            setProgress(null);
+            ["runCity", "runView"].forEach((b) => $(b).disabled = false);
+            $("runCity").disabled = !cityExtent;
+            $("dropBtn").disabled = !grid;
+        }
+    }
+
+    async function sampleDem(ext, W, H, cs, cellM) {
+        const sampler = await elevation.createElevationSampler(ext, { demResolution: Math.max(1, cellM / 2), noDataValue: -9999 });
+        const dem = new Float32Array(W * H);
+        let bad = 0;
+        for (let r = 0; r < H; r++) {
+            const y = ext.ymax - (r + 0.5) * cs;
+            for (let c = 0; c < W; c++) {
+                const z = sampler.elevationAt(ext.xmin + (c + 0.5) * cs, y);
+                if (z == null || z <= -9000 || !isFinite(z)) { dem[r * W + c] = NaN; bad++; } else dem[r * W + c] = z;
+            }
+            if (r % 64 === 0) { setProgress(2 + 18 * r / H); await new Promise((ok) => setTimeout(ok, 0)); }
+        }
+        if (bad > W * H * 0.5) throw new Error("Elevation data unavailable for this area.");
+        return dem;
+    }
+
+    // Carve city culverts into the elevation grid so water can pass under roads (approximate).
+    async function burnCulverts(dem, ext, W, H, cs) {
+        let fs;
+        try {
+            const q = culvertLyr.createQuery();
+            q.geometry = ext; q.returnGeometry = true; q.outSpatialReference = ext.spatialReference; q.outFields = [];
+            fs = (await culvertLyr.queryFeatures(q)).features;
+        } catch (e) { console.warn("Culverts unavailable", e); return 0; }
+        const at = (x, y) => {
+            const c = Math.floor((x - ext.xmin) / cs), r = Math.floor((ext.ymax - y) / cs);
+            return (c >= 0 && c < W && r >= 0 && r < H) ? r * W + c : -1;
+        };
+        let n = 0;
+        for (const f of fs) for (const path of f.geometry.paths) {
+            if (path.length < 2) continue;
+            // Sample a little beyond each end so the carve reaches both sides of the embankment.
+            const a = path[0], b = path[path.length - 1];
+            const len = Math.hypot(b[0] - a[0], b[1] - a[1]); if (len === 0) continue;
+            const ux = (b[0] - a[0]) / len, uy = (b[1] - a[1]) / len, ext2 = 2 * cs;
+            const p0 = [a[0] - ux * ext2, a[1] - uy * ext2], p1 = [b[0] + ux * ext2, b[1] + uy * ext2];
+            const i0 = at(p0[0], p0[1]), i1 = at(p1[0], p1[1]);
+            if (i0 < 0 || i1 < 0 || !isFinite(dem[i0]) || !isFinite(dem[i1])) continue;
+            const z0 = dem[i0] - CONFIG.culvertBurnM, z1 = dem[i1] - CONFIG.culvertBurnM;
+            const L = len + 2 * ext2, steps = Math.ceil(L / (cs / 2));
+            for (let s = 0; s <= steps; s++) {
+                const t = s / steps, i = at(p0[0] + (p1[0] - p0[0]) * t, p0[1] + (p1[1] - p0[1]) * t);
+                if (i >= 0) dem[i] = Math.min(dem[i], z0 + (z1 - z0) * t);
+            }
+            n++;
+        }
+        return n;
+    }
+
+    function getWorker() {
+        if (worker) return worker;
+        const src = $("flowWorker").textContent;
+        worker = new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
+        return worker;
+    }
+    // The worker answers messages in order, so pending requests are a simple FIFO queue.
+    const pending = [];
+    function workerRun(msg) {
+        return new Promise((resolve, reject) => {
+            const w = getWorker();
+            if (!w.onmessage) w.onmessage = (e) => {
+                const m = e.data;
+                if (m.type === "progress") { setProgress(20 + m.pct * 0.75); setStatus(m.msg + "…"); return; }
+                const p = pending.shift(); if (!p) return;
+                if (m.type === "error") p.reject(new Error(m.msg)); else p.resolve(m.res || m);
+            };
+            pending.push({ resolve, reject });
+            w.postMessage(msg, msg.dem ? [msg.dem.buffer] : []);
+        });
+    }
+
+    /* ---------- flow paths ---------- */
+    const CLASSES = [
+        { max: 25, color: [127, 211, 242, 0.95], size: 2 },
+        { max: 250, color: [57, 169, 224, 1], size: 3 },
+        { max: 2500, color: [31, 111, 178, 1], size: 5 },
+        { max: Infinity, color: [18, 62, 122, 1], size: 7 }
+    ];
+    const SYMBOLS = CLASSES.map((k) => ({
+        type: "line-3d",
+        symbolLayers: [{
+            type: "line", size: k.size, material: { color: k.color }, cap: "round", join: "round",
+            marker: { type: "style", style: "arrow", placement: "end", color: k.color }
+        }]
+    }));
+
+    function streamAcres() { return niceAcres(logAcres(+$("streamSl").value, STREAM_RANGE[0], STREAM_RANGE[1])); }
+    function handAcres() { return niceAcres(logAcres(+$("handAreaSl").value, HAND_RANGE[0], HAND_RANGE[1])); }
+
+    // Chaikin smoothing in grid units (keeps endpoints), so stair-stepped D8 paths read as natural lines.
+    function smooth(p, iters) {
+        for (let it = 0; it < iters; it++) {
+            if (p.length < 6) return p;
+            const q = [p[0], p[1]];
+            for (let i = 0; i < p.length - 2; i += 2) {
+                const x0 = p[i], y0 = p[i + 1], x1 = p[i + 2], y1 = p[i + 3];
+                q.push(0.75 * x0 + 0.25 * x1, 0.75 * y0 + 0.25 * y1, 0.25 * x0 + 0.75 * x1, 0.25 * y0 + 0.75 * y1);
+            }
+            q.push(p[p.length - 2], p[p.length - 1]);
+            p = q;
+        }
+        return p;
+    }
+
+    function drawStreams(segments) {
+        streamLyr.removeAll();
+        if (!grid) return;
+        const { cs, xmin, ymax, cellM } = grid, sr = view.spatialReference;
+        const pieceCells = CONFIG.pieceM / cellM;
+        const graphics = [];
+        for (const s of segments) {
+            const cls = CLASSES.findIndex((k) => s.acres < k.max);
+            const p = smooth(s.p, 2);
+            // Cut into pieces of roughly pieceM so the end arrows repeat along the path.
+            let piece = [[xmin + (p[0] + 0.5) * cs, ymax - (p[1] + 0.5) * cs]], run = 0;
+            for (let i = 2; i < p.length; i += 2) {
+                run += Math.hypot(p[i] - p[i - 2], p[i + 1] - p[i - 1]);
+                piece.push([xmin + (p[i] + 0.5) * cs, ymax - (p[i + 1] + 0.5) * cs]);
+                const last = i >= p.length - 2;
+                if (run >= pieceCells || last) {
+                    if (piece.length >= 2) graphics.push(new Graphic({ geometry: new Polyline({ paths: [piece], spatialReference: sr }), symbol: SYMBOLS[cls], attributes: { acres: s.acres } }));
+                    piece = [piece[piece.length - 1]]; run = 0;
+                }
+            }
+        }
+        streamLyr.addMany(graphics);
+    }
+
+    let streamTimer = null;
+    $("streamSl").addEventListener("input", () => {
+        $("streamVal").textContent = fmtAcres(streamAcres());
+        clearTimeout(streamTimer);
+        streamTimer = setTimeout(async () => {
+            if (!grid) return;
+            const m = await workerRun({ type: "streams", streamAcres: streamAcres() });
+            drawStreams(m.segments);
+        }, 250);
+    });
+    $("streamChk").addEventListener("change", () => streamLyr.visible = $("streamChk").checked);
+
+    /* ---------- raster overlays (low spots, rising water) ---------- */
+    function canvasFor(fn) {
+        const { W, H } = grid, cv = document.createElement("canvas");
+        cv.width = W; cv.height = H;
+        const ctx = cv.getContext("2d"), img = ctx.createImageData(W, H), d = img.data;
+        for (let i = 0, j = 0; i < W * H; i++, j += 4) fn(i, d, j);
+        ctx.putImageData(img, 0, 0);
+        return cv;
+    }
+    function setMedia(layer, cv) {
+        const geo = new ExtentAndRotationGeoreference({ extent: grid.extent });
+        if (!layer.__el) {
+            layer.__el = new ImageElement({ image: cv, georeference: geo });
+            layer.source = layer.__el;
+        } else {
+            layer.__el.georeference = geo;
+            layer.__el.image = cv;
+        }
+    }
+    function drawPond() {
+        const pond = grid.pond, minD = CONFIG.pondMinM;
+        setMedia(pondMedia, canvasFor((i, d, j) => {
+            const z = pond[i];
+            if (z > minD) {
+                const t = Math.min(1, (z - minD) / 1.5);
+                d[j] = 255 - 41 * t; d[j + 1] = 196 - 76 * t; d[j + 2] = 61 - 41 * t; d[j + 3] = 115 + 105 * t;
+            }
+        }));
+    }
+    let handFrame = 0;
+    function drawHand() {
+        if (handFrame) return;
+        handFrame = requestAnimationFrame(() => { handFrame = 0; drawHandNow(); });
+    }
+    function drawHandNow() {
+        if (!grid || !$("handChk").checked) return;
+        const hand = grid.hand, lv = +$("handSl").value * 0.3048;
+        setMedia(handMedia, canvasFor((i, d, j) => {
+            const h = hand[i];
+            if (h <= lv && lv > 0) {
+                const t = Math.min(1, (lv - h) / Math.max(lv, 0.5));
+                d[j] = 120 - 110 * t; d[j + 1] = 190 - 130 * t; d[j + 2] = 255 - 95 * t; d[j + 3] = 115 + 100 * t;
+            }
+        }));
+    }
+    $("pondChk").addEventListener("change", () => pondMedia.visible = $("pondChk").checked);
+    $("handChk").addEventListener("change", () => { handMedia.visible = $("handChk").checked; drawHand(); });
+    $("handSl").addEventListener("input", () => { $("handVal").textContent = $("handSl").value + " ft"; drawHand(); });
+    let handTimer = null;
+    $("handAreaSl").addEventListener("input", () => {
+        $("handAreaVal").textContent = fmtAcres(handAcres());
+        clearTimeout(handTimer);
+        handTimer = setTimeout(async () => {
+            if (!grid) return;
+            const m = await workerRun({ type: "hand", handAcres: handAcres() });
+            grid.hand = m.hand; drawHand();
+        }, 250);
+    });
+
+    /* ---------- raindrop ---------- */
+    let dropMode = false, dropAnim = null;
+    const setDropMode = (on) => { dropMode = on; $("modeChip").style.display = on ? "block" : "none"; view.container.style.cursor = on ? "crosshair" : ""; };
+    $("dropBtn").onclick = () => setDropMode(!dropMode);
+    $("clearDrops").onclick = () => { dropLyr.removeAll(); $("dropInfo").textContent = ""; $("clearDrops").disabled = true; };
+    window.addEventListener("keydown", (e) => { if (e.key === "Escape") setDropMode(false); });
+
+    view.on("click", (ev) => {
+        if (!dropMode || !grid) return;
+        ev.stopPropagation();
+        setDropMode(false);
+        if (ev.mapPoint) dropRain(ev.mapPoint);
+    });
+
+    function dropRain(pt) {
+        const { W, H, cs, xmin, ymax, down, dem, pond, cellM } = grid;
+        const c0 = Math.floor((pt.x - xmin) / cs), r0 = Math.floor((ymax - pt.y) / cs);
+        if (c0 < 0 || c0 >= W || r0 < 0 || r0 >= H) { $("dropInfo").textContent = "That point is outside the analyzed area. Analyze it first."; return; }
+        // Follow D8 directions downhill. Directions come from a filled surface, so there are no loops.
+        let i = r0 * W + c0, last = i, maxPond = 0, cells = 0;
+        if (down[i] === -2) { $("dropInfo").textContent = "No elevation data at that point."; return; }
+        const path = [];
+        while (i >= 0 && cells++ < W * H) {
+            path.push([xmin + ((i % W) + 0.5) * cs, ymax - (((i / W) | 0) + 0.5) * cs]);
+            if (pond[i] > maxPond) maxPond = pond[i];
+            last = i; i = down[i];
+        }
+        let distM = 0;
+        for (let k = 1; k < path.length; k++) distM += Math.hypot(path[k][0] - path[k - 1][0], path[k][1] - path[k - 1][1]);
+        distM *= cellM / cs; // map units to ground meters
+        const dropFt = Math.max(0, dem[r0 * W + c0] - dem[last]) * 3.28084, distFt = distM * 3.28084;
+        const leaves = down[last] === -1;
+
+        const sp = smoothPts(path);
+        const sym = { type: "line-3d", symbolLayers: [{ type: "line", size: 5, material: { color: [255, 214, 10, 1] }, cap: "round", marker: { type: "style", style: "arrow", placement: "end", color: [255, 214, 10, 1] } }] };
+        const startG = new Graphic({ geometry: new Point({ x: path[0][0], y: path[0][1], spatialReference: view.spatialReference }),
+            symbol: { type: "point-3d", symbolLayers: [{ type: "icon", size: 14, resource: { primitive: "circle" }, material: { color: [255, 214, 10, 1] }, outline: { color: [27, 58, 45, 1], size: 2 } }] } });
+        const lineG = new Graphic({ symbol: sym });
+        dropLyr.addMany([startG, lineG]);
+        $("clearDrops").disabled = false;
+
+        if (dropAnim) cancelAnimationFrame(dropAnim);
+        const total = sp.length, dur = Math.min(6000, 800 + total * 6), t0 = performance.now();
+        const stepFn = (t) => {
+            const n = Math.max(2, Math.round(total * Math.min(1, (t - t0) / dur)));
+            lineG.geometry = new Polyline({ paths: [sp.slice(0, n)], spatialReference: view.spatialReference });
+            if (n < total) dropAnim = requestAnimationFrame(stepFn);
+        };
+        dropAnim = requestAnimationFrame(stepFn);
+
+        const fmt = (v) => Math.round(v).toLocaleString();
+        $("dropInfo").innerHTML = `Travels about <b>${fmt(distFt)} ft</b> and drops <b>${fmt(dropFt)} ft</b>` +
+            (maxPond > CONFIG.pondMinM ? `, passing through a low spot that could pond about <b>${(maxPond * 3.28084).toFixed(1)} ft</b> deep` : "") +
+            (leaves ? `. It continues beyond the analyzed area.` : `.`);
+    }
+    function smoothPts(path) {
+        const flat = []; for (const p of path) flat.push(p[0], p[1]);
+        const s = smooth(flat, 2), out = [];
+        for (let i = 0; i < s.length; i += 2) out.push([s[i], s[i + 1]]);
+        return out;
+    }
+
+    /* ---------- context toggles ---------- */
+    $("femaChk").addEventListener("change", () => fema.visible = $("femaChk").checked);
+    $("culvLyrChk").addEventListener("change", () => culvertLyr.visible = $("culvLyrChk").checked);
+    $("boundaryChk").addEventListener("change", () => boundary.visible = $("boundaryChk").checked);
+
+    $("streamVal").textContent = fmtAcres(streamAcres());
+    $("handAreaVal").textContent = fmtAcres(handAcres());
+});
+</script>
+</body>
+</html>
