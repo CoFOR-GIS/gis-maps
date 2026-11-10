@@ -37,6 +37,8 @@
     display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;
     padding:.65rem 1rem;border-bottom:1px solid var(--line);
   }
+  .brand{display:flex;align-items:center;gap:.65rem}
+  .brand-logo{height:calc(2.5rem * var(--fs-header));width:auto;flex-shrink:0;display:block}
   .brand h1{font-family:"DM Serif Display",serif;font-weight:400;font-size:calc(1.35rem * var(--fs-header));line-height:1.1}
   .brand p{font-size:calc(.72rem * var(--fs-header));letter-spacing:.08em;text-transform:uppercase;color:var(--olive)}
   #filters{display:flex;gap:.5rem;flex-wrap:wrap;margin-left:auto}
@@ -209,8 +211,11 @@ const FONT = { base:15, header:1.34, labels:1.13, numbers:1.1 };
 
 <header>
   <div class="brand">
-    <h1>City of Fair Oaks Ranch</h1>
-    <p>Land Use Assumptions</p>
+    <img class="brand-logo" src="logo.svg" alt="City of Fair Oaks Ranch logo">
+    <div>
+      <h1>Land Use Assumptions</h1>
+      <p>City of Fair Oaks Ranch &middot; Public Works</p>
+    </div>
   </div>
   <div id="filters" aria-label="Filters"></div>
   <button id="refresh" title="Re-query the parcel layer">Refresh data</button>
