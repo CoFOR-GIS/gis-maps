@@ -54,21 +54,24 @@ All feature services consumed by maps in this repo must be:
 
 ## CivicPlus Embedding
 
-Maps are designed to be embedded on [fairoaksranchtx.org](https://www.fairoaksranchtx.org) via iframe. CivicPlus strips inline JavaScript from HTML widgets, so all maps must be hosted externally and loaded via iframe.
+Maps are embedded on [fairoaksranch.gov](https://www.fairoaksranch.gov) through a CivicPlus **Custom HTML** widget. CivicPlus strips inline JavaScript from HTML widgets, so the map is hosted here and loaded with a single iframe. This is the standard pattern (used on the Annexation History, Capital Improvement Projects and Transportation Map pages):
 
 ```html
 <iframe
   src="https://cofor-gis.github.io/gis-maps/{MapName}/"
-  title="City of Fair Oaks Ranch — {Map Title}"
+  title="City of Fair Oaks Ranch {Map Title} Map"
   width="100%"
   height="800"
-  style="border:none; border-radius:8px;"
-  loading="lazy"
-  allow="fullscreen">
+  style="border:none; border-radius:8px;">
 </iframe>
 ```
 
-Adjust `height` to fit the page layout. If the CivicPlus content column is narrow (< 860px), the map will switch to its mobile layout automatically.
+Standard rules:
+
+- One Custom HTML widget per page containing only the iframe: no scripts, no fixed pixel width, no query strings, no Outlook SafeLinks or other redirect URLs (paste the cofor-gis.github.io address directly).
+- Height 800. The CivicPlus content column is about 900-1,000px wide on desktop.
+- Inside the app: a slim title bar (city logo, map title, "City of Fair Oaks Ranch - {Department}" subtitle, filters or action buttons on the right), the map, and a side panel that scrolls on its own. Below the app's mobile breakpoint the panel stacks under the map.
+- Deviations are allowed when this layout gives a poor user experience for a specific map; document the reason in that map's README.
 
 ---
 
