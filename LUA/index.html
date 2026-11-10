@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<script>/* Embedded in a page (e.g. fairoaksranch.gov): stacked layout, no title bar. See README. */
+try{if(window.self!==window.top)document.documentElement.classList.add("embedded")}catch(e){document.documentElement.classList.add("embedded")}</script>
 <title>Land Use Assumptions | City of Fair Oaks Ranch</title>
 <link rel="icon" href="logo.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -146,6 +148,27 @@
     #stats{border-left:none;border-top:1px solid var(--line)}
     #filters{margin-left:0}
   }
+  @media (max-width:600px){
+    header{gap:.5rem;padding:.5rem .6rem}
+    .brand-logo{height:calc(1.9rem * var(--fs-header))}
+    .brand h1{font-size:calc(1.1rem * var(--fs-header))}
+    .brand p{font-size:calc(.6rem * var(--fs-header))}
+    #filters{gap:.35rem;width:100%}
+    .msel{flex:1 1 calc(50% - .35rem)}
+    .msel > button{min-width:0;width:100%;padding:.3rem .45rem}
+    #refresh{padding:.3rem .6rem}
+    #stats{padding:.75rem .6rem}
+  }
+  /* ---------- embedded (iframe on fairoaksranch.gov) - LUA exception to the CivicPlus standard ---------- */
+  html.embedded,html.embedded body{height:auto}
+  html.embedded .brand{display:none}
+  html.embedded header{padding:.5rem .75rem}
+  html.embedded #filters{margin-left:0}
+  html.embedded main{display:block;flex:none}
+  html.embedded #viewDiv{height:440px}
+  html.embedded #stats{overflow:visible;border-left:none;border-top:1px solid var(--line);display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,22rem),1fr));column-gap:2rem;align-items:start}
+  html.embedded #status,html.embedded #stats .note{grid-column:1/-1}
+  @media (max-width:600px){ html.embedded #viewDiv{height:320px} }
   @media (prefers-reduced-motion:reduce){ .bar i{transition:none} }
 </style>
 <script>

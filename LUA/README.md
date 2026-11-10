@@ -31,3 +31,23 @@ edits; see the internal staff guide (kept on gis.local, not in this repo)
 for recipes, stat definitions, and troubleshooting.
 
 Maintained by Engineering Services / GIS, City of Fair Oaks Ranch.
+
+## Embedding on fairoaksranch.gov (exception to the CivicPlus standard)
+
+Approved by Ernie Martz, 2026-11-10 (under CIVICPLUS-STD-20261110, section 4c).
+The standard side-by-side layout made the two LUA tables scroll inside a narrow
+panel and repeated the page title. When the app detects it is inside an iframe
+it switches to an embedded layout:
+
+- no title bar (the City page already shows the title); filters and Refresh stay
+- map on top (440 px; 320 px on phones), both tables below, side by side on
+  desktop and stacked on phones, with no scrolling inside the panel
+- opened directly (not in a frame) the app looks exactly as before
+
+CivicPlus Custom HTML widget on page 684:
+
+```html
+<iframe src="https://cofor-gis.github.io/gis-maps/LUA/" title="City of Fair Oaks Ranch Land Use Assumptions Map" width="100%" height="1100" style="border:none; border-radius:8px;"></iframe>
+```
+
+Height 1100 fits the desktop layout exactly; on phones the frame scrolls a little.
