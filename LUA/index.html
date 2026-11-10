@@ -146,6 +146,17 @@
     #stats{border-left:none;border-top:1px solid var(--line)}
     #filters{margin-left:0}
   }
+  @media (max-width:600px){
+    header{gap:.5rem;padding:.5rem .6rem}
+    .brand-logo{height:calc(1.9rem * var(--fs-header))}
+    .brand h1{font-size:calc(1.1rem * var(--fs-header))}
+    .brand p{font-size:calc(.6rem * var(--fs-header))}
+    #filters{gap:.35rem;width:100%}
+    .msel{flex:1 1 calc(50% - .35rem)}
+    .msel > button{min-width:0;width:100%;padding:.3rem .45rem}
+    #refresh{padding:.3rem .6rem}
+    #stats{padding:.75rem .6rem}
+  }
   @media (prefers-reduced-motion:reduce){ .bar i{transition:none} }
 </style>
 <script>
