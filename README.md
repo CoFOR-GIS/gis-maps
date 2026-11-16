@@ -23,6 +23,7 @@ If the app writes data or requires a login, it belongs in `gis-apps`. If it only
 | Map | Path | Description |
 |---|---|---|
 | Annexation History | [`/AnnexationHistory`](https://cofor-gis.github.io/gis-maps/AnnexationHistory/) | Era-based annexation viewer with time slider, ordinance document links, and address search |
+| Street Work History | [`/StreetWorkHistory`](https://cofor-gis.github.io/gis-maps/StreetWorkHistory/) | Completed street maintenance by segment: age-of-treatment map, treatment and year filters, full history per street |
 
 ---
 

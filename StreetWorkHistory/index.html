@@ -1,0 +1,821 @@
+<!doctype html>
+<html lang="en" data-theme="cream">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>City of Fair Oaks Ranch — Street Work History Map</title>
+
+    <!-- Load Calcite components from CDN -->
+    <script type="module" src="https://js.arcgis.com/calcite-components/3.3.3/calcite.esm.js"></script>
+
+    <!-- Load the ArcGIS Maps SDK for JavaScript from CDN -->
+    <script src="https://js.arcgis.com/4.34/"></script>
+
+    <!-- Load Map components from CDN -->
+    <script type="module" src="https://js.arcgis.com/4.34/map-components/"></script>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="icon" href="logo.svg" />
+
+    <!-- CoFOR GIS design system (copied from _design/components.css and _design/tokens.css; D-050). Keep the @import first. -->
+    <style>
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* CoFOR GIS components. Every value is a token from tokens.json (tokens.css).
+   Extracted from gis-maps/AcreageByCounty, gis-maps/CIP, gis-apps/FieldExtractor
+   and gis-apps/LUAEditor; class names are prefixed cfr- (City of Fair Oaks Ranch). */
+
+.cfr { font-family: var(--font-sans); color: var(--text-ink); -webkit-font-smoothing: antialiased; }
+.cfr *, .cfr *::before, .cfr *::after { box-sizing: border-box; }
+.cfr :focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+/* ---------- Masthead ---------- */
+.cfr-masthead { display: flex; align-items: center; gap: var(--space-4); padding: 18px var(--space-6);
+  background: var(--bg-card); border-bottom: 2px solid var(--brand-sage); }
+.cfr-masthead__mark { height: 42px; width: auto; flex: none; display: block; }
+.cfr-masthead__titles { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cfr-masthead__title { margin: 0; font-family: var(--font-display); font-weight: 700; font-size: 30px;
+  line-height: 1.05; color: var(--text-heading); }
+.cfr-masthead__org { margin-left: auto; text-align: right; font-size: 12px; line-height: 1.4; color: var(--text-muted); }
+.cfr-masthead__org b { color: var(--text-heading); font-weight: 600; }
+.cfr-masthead--admin { background: var(--dept-admin); border-bottom-color: var(--brand-gold); }
+.cfr-masthead--admin .cfr-masthead__title, .cfr-masthead--admin .cfr-masthead__org b { color: var(--brand-cream); }
+.cfr-masthead--admin .cfr-masthead__org, .cfr-masthead--admin .cfr-eyebrow { color: var(--brand-tan); }
+
+/* ---------- Eyebrow ---------- */
+.cfr-eyebrow { font-size: 11px; line-height: 14px; letter-spacing: .16em; text-transform: uppercase;
+  font-weight: 700; color: var(--text-accent); }
+
+/* ---------- Button ---------- */
+.cfr-btn { display: inline-flex; align-items: center; gap: 7px; font: 600 13px/16px var(--font-sans);
+  padding: 9px 14px; border-radius: var(--radius-md); border: 1px solid transparent; cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s; }
+.cfr-btn--primary { background: var(--action-primary); color: var(--action-primary-text); }
+.cfr-btn--primary:hover { background: var(--action-primary-hover); }
+.cfr-btn--secondary { background: var(--bg-card); color: var(--text-heading); border-color: var(--line);
+  box-shadow: var(--shadow-control); }
+.cfr-btn--secondary:hover { border-color: var(--brand-sage); }
+.cfr-btn--outline { background: transparent; color: var(--text-ink); border-color: var(--line-strong); }
+.cfr-btn--outline:hover { border-color: var(--text-muted); background: var(--bg-page); }
+.cfr-btn--danger { background: var(--status-error-wash); color: var(--status-error); border-color: var(--status-error); }
+.cfr-btn--small { font-size: 12px; padding: 6px 11px; }
+.cfr-btn[disabled] { opacity: .45; cursor: not-allowed; }
+
+/* ---------- Segmented control ---------- */
+.cfr-segmented { display: inline-flex; gap: 3px; padding: 3px; background: var(--bg-page);
+  border: 1px solid var(--line); border-radius: 9px; }
+.cfr-segmented button { border: none; background: none; font: 600 12.5px/16px var(--font-sans);
+  color: var(--text-muted); padding: 6px 12px; border-radius: var(--radius-sm); cursor: pointer; }
+.cfr-segmented button[aria-pressed="true"] { background: var(--action-primary); color: var(--action-primary-text); }
+.cfr-segmented button[disabled] { opacity: .38; cursor: default; }
+
+/* ---------- Stat band (KPI) ---------- */
+.cfr-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1px;
+  background: var(--line); border-block: 1px solid var(--line); }
+.cfr-stat { background: var(--bg-page); padding: 18px var(--space-6); }
+.cfr-stat__label { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; font-weight: 700;
+  color: var(--text-muted); margin-bottom: 6px; }
+.cfr-stat__label em { font-style: normal; color: var(--text-accent); }
+.cfr-stat__value { font-family: var(--font-display); font-weight: 700; font-size: 40px; line-height: 1; color: var(--text-heading); }
+.cfr-stat__unit { font: 600 .45em var(--font-sans); color: var(--text-muted); margin-left: 6px; }
+
+/* ---------- Panel ---------- */
+.cfr-panel { background: var(--bg-card); border: 1px solid var(--line); border-radius: var(--radius-lg);
+  padding: var(--space-5); box-shadow: var(--shadow-sm); }
+.cfr-panel__title { margin: 0 0 4px; font: 600 19px/24px var(--font-display); color: var(--text-heading); }
+.cfr-panel__sub { margin: 0 0 14px; font-size: 12.5px; line-height: 19px; color: var(--text-muted); }
+
+/* ---------- Field ---------- */
+.cfr-field { display: flex; flex-direction: column; gap: 5px; }
+.cfr-field label { font-size: 12px; font-weight: 600; color: var(--text-ink); }
+.cfr-field input, .cfr-field select { font: 400 13.5px/20px var(--font-sans); color: var(--text-ink);
+  background: var(--bg-card); border: 1px solid var(--line-strong); border-radius: var(--radius-sm); padding: 8px 11px; }
+.cfr-field input.is-code { font-family: var(--font-mono); font-size: 12px; }
+.cfr-field input:focus { outline: none; border-color: var(--brand-sage); box-shadow: 0 0 0 3px var(--sage-wash); }
+.cfr-field input[aria-invalid="true"] { border-color: var(--status-error); }
+.cfr-field__hint { font-size: 11.5px; line-height: 16px; color: var(--text-muted); }
+.cfr-field__hint.is-error { color: var(--status-error); }
+
+/* ---------- Toggle ---------- */
+.cfr-toggle { display: inline-flex; align-items: center; gap: 9px; font-size: 13px; font-weight: 500; cursor: pointer; }
+.cfr-toggle input { appearance: none; margin: 0; width: 34px; height: 19px; border-radius: var(--radius-pill);
+  background: var(--bg-sunken); border: 1px solid var(--line-strong); position: relative; cursor: pointer; transition: all .2s; }
+.cfr-toggle input::after { content: ''; position: absolute; top: 2px; left: 2px; width: 13px; height: 13px;
+  border-radius: 50%; background: var(--text-muted); transition: all .2s; }
+.cfr-toggle input:checked { background: var(--sage-wash); border-color: var(--brand-sage); }
+.cfr-toggle input:checked::after { left: 17px; background: var(--brand-sage); }
+
+/* ---------- Status bar ---------- */
+.cfr-status { display: flex; align-items: center; gap: 9px; padding: 9px 13px; border-radius: var(--radius-sm);
+  border: 1px solid; font-size: 12.5px; line-height: 18px; font-weight: 500; }
+.cfr-status__icon { font-weight: 700; flex: none; width: 16px; text-align: center; }
+.cfr-status--info { background: var(--status-info-wash); border-color: var(--status-info); color: var(--status-info); }
+.cfr-status--success { background: var(--status-success-wash); border-color: var(--status-success); color: var(--status-success); }
+.cfr-status--warning { background: var(--status-warning-wash); border-color: var(--status-warning); color: var(--status-warning); font-weight: 700; }
+.cfr-status--error { background: var(--status-error-wash); border-color: var(--status-error); color: var(--status-error); }
+
+/* ---------- Tag ---------- */
+.cfr-tag { display: inline-block; font: 600 11px/16px var(--font-mono); padding: 1px 6px; border-radius: var(--radius-xs); }
+.cfr-tag--sage { background: var(--sage-wash); color: var(--text-accent); }
+.cfr-tag--success { background: var(--status-success-wash); color: var(--status-success); }
+.cfr-tag--info { background: var(--status-info-wash); color: var(--status-info); }
+.cfr-tag--warning { background: var(--status-warning-wash); color: var(--status-warning); }
+.cfr-tag--error { background: var(--status-error-wash); color: var(--status-error); }
+.cfr-tag--muted { background: var(--bg-sunken); color: var(--text-ink); }
+
+/* ---------- Legend + share band ---------- */
+.cfr-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 11.5px; color: var(--text-muted); }
+.cfr-legend__key { display: inline-block; width: 15px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.cfr-band { height: 9px; border-radius: var(--radius-pill); background: var(--line); overflow: hidden; display: flex; }
+.cfr-band > span { height: 100%; }
+
+/* ---------- Popup card (inside the ArcGIS popup) ---------- */
+.cfr-popcard { display: flex; min-width: 210px; font-family: var(--font-sans); }
+.cfr-popcard__bar { width: 5px; border-radius: 3px; background: var(--popcard-accent, var(--brand-navy)); margin-right: 13px; flex: none; }
+.cfr-popcard__value { font: 700 30px/1 var(--font-display); color: var(--text-heading); margin-top: 4px; }
+.cfr-popcard__value span { font: 600 13px var(--font-sans); color: var(--text-muted); margin-left: 6px; }
+.cfr-popcard__addr { font-size: 13px; color: var(--text-ink); margin-top: 7px; }
+
+/* ---------- Menu ---------- */
+.cfr-menu { background: var(--bg-card); border: 1px solid var(--line); border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-overlay); overflow: hidden; min-width: 168px; }
+.cfr-menu__group { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; font-weight: 700;
+  color: var(--text-muted); padding: 9px 14px 4px; }
+.cfr-menu button { display: block; width: 100%; text-align: left; background: none; border: none;
+  padding: 10px 14px; font: 400 13px var(--font-sans); color: var(--text-ink); cursor: pointer; }
+.cfr-menu button:hover { background: var(--bg-page); color: var(--text-heading); }
+
+/* ---------- Loading / empty state ---------- */
+.cfr-state { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  padding: var(--space-6); text-align: center; font-size: 13.5px; color: var(--text-muted); background: var(--bg-page); }
+.cfr-state b { font-size: 15px; color: var(--text-heading); }
+.cfr-spinner { width: 26px; height: 26px; border-radius: 50%; border: 3px solid var(--line);
+  border-top-color: var(--brand-sage); animation: cfr-spin .8s linear infinite; }
+@keyframes cfr-spin { to { transform: rotate(360deg); } }
+
+/* ---------- Banner (over the map) ---------- */
+.cfr-banner { display: inline-block; background: var(--bg-inverse); color: var(--text-inverse); font-size: 12.5px;
+  line-height: 18px; padding: 9px 14px; border-radius: var(--radius-md); box-shadow: var(--shadow-overlay); max-width: 80%; }
+
+/* ---------- Footer ---------- */
+.cfr-footer { display: flex; flex-wrap: wrap; gap: 6px 18px; padding: 12px var(--space-6); background: var(--bg-card);
+  border-top: 1px solid var(--line); font-size: 11px; color: var(--text-muted); }
+.cfr-footer__dot { color: var(--brand-sage); }
+
+@media (prefers-reduced-motion: reduce) { .cfr-spinner { animation: none; } .cfr-btn, .cfr-toggle input { transition: none; } }
+
+/* CoFOR GIS Design System - generated from tokens.json (review copy version 1794335045-9fa6). Do not edit by hand. */
+
+:root, [data-theme="cream"] {
+  --bg-page: #faf6ee;
+  --bg-card: #ffffff;
+  --bg-sunken: #f3eee2;
+  --bg-inverse: #192737;
+  --text-ink: #1f2a36;
+  --text-heading: #192737;
+  --text-muted: #6b6f66;
+  --text-accent: #68734d;
+  --text-inverse: #ffffff;
+  --line: #e4decf;
+  --line-strong: #c9c2b3;
+  --brand-navy: #192737;
+  --brand-cream: #faf6ee;
+  --brand-sage: #8d956c;
+  --brand-sage-hover: #7c8459;
+  --brand-amber: #d49a4e;
+  --brand-gold: #c8a94e;
+  --brand-tan: #d4ca96;
+  --brand-sky: #b0c1c9;
+  --brand-olive-deep: #717c60;
+  --brand-brick: #a64850;
+  --action-primary: #192737;
+  --action-primary-hover: #22334a;
+  --action-primary-text: #ffffff;
+  --focus-ring: var(--text-accent);
+  --status-success: #3d7a4a;
+  --status-info: #4a7c90;
+  --status-warning: #9a7f2e;
+  --status-error: #a64850;
+  --status-success-wash: rgba(61,122,74,0.08);
+  --status-info-wash: rgba(74,124,144,0.08);
+  --status-warning-wash: rgba(200,169,78,0.10);
+  --status-error-wash: rgba(166,72,80,0.08);
+  --sage-wash: rgba(141,149,108,0.12);
+  --dept-admin: #1b3a2d;
+  --dept-admin-soft: #2d5e47;
+  --dept-engineering: #23282c;
+  --dept-engineering-steel: #6b757c;
+  --dept-emergency: #1c2a40;
+  --county-bexar: var(--brand-navy);
+  --county-kendall: var(--brand-sage);
+  --county-comal: #d49a4e;
+  --county-other: #b7b2a6;
+  --cip-water: var(--brand-sky);
+  --cip-wastewater: var(--brand-navy);
+  --cip-roadway: var(--brand-sage);
+  --cip-drainage: var(--brand-olive-deep);
+  --cip-building: var(--brand-brick);
+  --sev-0: #1e7b3c;
+  --sev-1: #f2b705;
+  --sev-2: #e8721c;
+  --sev-3: #ce2029;
+  --sev-4: #7a0c1f;
+  --shadow-sm: 0 1px 2px rgba(25,39,55,0.05);
+  --shadow-md: 0 4px 12px rgba(25,39,55,0.07);
+  --shadow-control: 0 1px 4px rgba(25,39,55,0.12);
+  --shadow-overlay: 0 6px 22px rgba(25,39,55,0.18);
+}
+
+[data-theme="navy"] {
+  --bg-page: #192737;
+  --bg-card: #22334a;
+  --bg-sunken: #101b2d;
+  --bg-inverse: #faf6ee;
+  --text-ink: #f2ecd8;
+  --text-heading: #faf6ee;
+  --text-muted: #cfc6a8;
+  --text-accent: #a8ae8e;
+  --text-inverse: #192737;
+  --line: rgba(242,236,216,0.14);
+  --line-strong: #2e4160;
+  --brand-amber: #e8b779;
+  --action-primary: #8d956c;
+  --action-primary-hover: #a8ae8e;
+  --action-primary-text: #192737;
+  --focus-ring: var(--text-accent);
+  --status-success: #7fb069;
+  --status-info: #4fc3d4;
+  --status-warning: #e0a83a;
+  --status-error: #ff8a93;
+  --county-bexar: var(--brand-cream);
+  --county-kendall: var(--brand-sage);
+  --cip-water: var(--brand-sky);
+  --cip-wastewater: var(--brand-cream);
+  --cip-roadway: var(--brand-sage);
+  --cip-drainage: var(--brand-olive-deep);
+  --cip-building: var(--brand-brick);
+}
+
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 28px;
+  --space-7: 40px;
+  --radius-xs: 3px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-pill: 999px;
+  --header-height: 56px;
+  --rail-width: 396px;
+  --panel-width: 380px;
+  --content-max: 1200px;
+  --breakpoint-stack: 880px;
+  --font-display: "Playfair Display", Georgia, serif;
+  --font-sans: "DM Sans", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+.cfr-t-display-xl { font-family: var(--font-display); font-size: 40px; line-height: 1; font-weight: 700; }
+
+.cfr-t-display-lg { font-family: var(--font-display); font-size: 30px; line-height: 1.05; font-weight: 700; }
+
+.cfr-t-display-md { font-family: var(--font-display); font-size: 28px; line-height: 1.1; font-weight: 700; }
+
+.cfr-t-heading { font-family: var(--font-display); font-size: 19px; line-height: 24px; font-weight: 600; }
+
+.cfr-t-title-sm { font-family: var(--font-sans); font-size: 15px; line-height: 20px; font-weight: 700; }
+
+.cfr-t-body { font-family: var(--font-sans); font-size: 13.5px; line-height: 20px; font-weight: 400; }
+
+.cfr-t-small { font-family: var(--font-sans); font-size: 12.5px; line-height: 19px; font-weight: 400; }
+
+.cfr-t-label { font-family: var(--font-sans); font-size: 13px; line-height: 16px; font-weight: 600; }
+
+.cfr-t-eyebrow { font-family: var(--font-sans); font-size: 11px; line-height: 14px; font-weight: 700; letter-spacing: 0.16em; }
+
+.cfr-t-caption { font-family: var(--font-sans); font-size: 11.5px; line-height: 18px; font-weight: 400; }
+
+.cfr-t-code { font-family: var(--font-mono); font-size: 11px; line-height: 16px; font-weight: 500; }
+
+.cfr-t-data { font-family: var(--font-mono); font-size: 12px; line-height: 18px; font-weight: 400; }
+    </style>
+
+    <style>
+      /* === App layout (tokens from the design-system block above) === */
+      :root {
+        --calcite-color-foreground-1: var(--bg-page);
+        --calcite-color-text-1: var(--text-ink);
+        --calcite-color-text-2: var(--text-muted);
+        --calcite-color-border-1: var(--line);
+        --calcite-color-brand: var(--brand-sage);
+        --calcite-color-brand-hover: var(--brand-sage-hover);
+        /* Age classes: dark to warm, and they differ in lightness (never colour alone) */
+        --age-1: var(--dept-admin);
+        --age-2: var(--brand-olive-deep);
+        --age-3: var(--brand-amber);
+        --age-4: var(--brand-brick);
+        --age-none: var(--county-other);
+      }
+      *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+      html, body { height: 100%; }
+      body { font-family: var(--font-sans); font-size: 13.5px; color: var(--text-ink); background: var(--bg-page); }
+
+      .app-shell { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+
+      /* Title bar: public gis-maps rule (_design/README.md 4.2, D-050 Q2) */
+      .app-header.cfr-masthead { padding: 9px 16px; gap: 10px; flex-shrink: 0; z-index: 10; }
+      .app-header .cfr-masthead__mark { height: 30px; }
+      .app-header .cfr-masthead__title { font-size: 20px; line-height: 1.1; white-space: nowrap; }
+
+      .main-content { flex: 1; display: flex; overflow: hidden; min-height: 0; }
+      .map-panel { flex: 1; position: relative; min-width: 0; }
+      arcgis-map { width: 100%; height: 100%; }
+
+      /* Rail (right, scrolls on its own) */
+      .rail { width: 396px; flex-shrink: 0; display: flex; flex-direction: column; background: var(--bg-card);
+        border-left: 1px solid var(--line); min-height: 0; }
+      .rail-scroll { flex: 1; overflow-y: auto; }
+      .rail-section { padding: 14px 18px; border-bottom: 1px solid var(--line); }
+      .rail-intro { font-size: 12.5px; line-height: 1.5; color: var(--text-muted); }
+      .rail-intro b { color: var(--text-ink); font-weight: 600; }
+      .filters { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; }
+      .filters .full { grid-column: 1 / -1; }
+      .filters select { width: 100%; }
+      .filter-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 2px; }
+
+      .mini-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-bottom: 1px solid var(--line); }
+      .mini-stat { background: var(--bg-page); padding: 10px 18px; }
+      .mini-stat__label { font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase; font-weight: 700; color: var(--text-muted); }
+      .mini-stat__value { font: 700 24px/1.15 var(--font-display); color: var(--text-heading); }
+
+      .dir-head { display: flex; align-items: baseline; justify-content: space-between; padding: 12px 18px 6px; }
+      .dir-title { font: 700 15px var(--font-display); color: var(--text-heading); }
+      .dir-count { font-size: 12px; color: var(--text-muted); }
+      .dir-filter { margin: 0 18px 8px; width: calc(100% - 36px); font: 400 13.5px/20px var(--font-sans); color: var(--text-ink);
+        padding: 7px 10px; border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--bg-card); }
+      .dir-filter:focus { outline: none; border-color: var(--brand-sage); box-shadow: 0 0 0 3px var(--sage-wash); }
+      .dir-list { list-style: none; }
+      .dir-list li { display: flex; align-items: center; gap: 10px; padding: 8px 18px; border-top: 1px solid var(--line); cursor: pointer; }
+      .dir-list li:hover, .dir-list li:focus { background: var(--bg-page); outline: none; }
+      .dir-list li.dim { opacity: .45; }
+      .dir-key { width: 4px; align-self: stretch; border-radius: 2px; flex: none; }
+      .dir-name { flex: 1; font-weight: 600; color: var(--text-heading); }
+      .dir-meta { font-size: 12px; color: var(--text-muted); text-align: right; white-space: nowrap; }
+
+      /* Detail view */
+      .detail { display: none; }
+      .rail.show-detail .detail { display: block; }
+      .rail.show-detail .browse { display: none; }
+      .detail-top { padding: 12px 18px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: center; }
+      .detail-title { font: 700 19px/1.2 var(--font-display); color: var(--text-heading); }
+      .detail-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+      .seg-card { padding: 12px 18px; border-bottom: 1px solid var(--line); }
+      .seg-card h3 { font: 600 13.5px var(--font-sans); color: var(--text-heading); display: flex; justify-content: space-between; gap: 8px; }
+      .seg-card h3 span { font-weight: 400; font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+      .seg-card.is-selected { background: var(--bg-page); box-shadow: inset 3px 0 0 var(--brand-sage); }
+      .hist { list-style: none; margin-top: 6px; }
+      .hist li { display: grid; grid-template-columns: 46px 1fr; gap: 2px 10px; padding: 5px 0; border-top: 1px dashed var(--line); }
+      .hist li:first-child { border-top: none; }
+      .hist-year { font: 700 15px/1.2 var(--font-display); color: var(--text-heading); }
+      .hist-what { font-weight: 600; color: var(--text-ink); }
+      .hist-note { grid-column: 2; font-size: 12px; color: var(--text-muted); }
+      .hist-empty { font-size: 12.5px; color: var(--text-muted); margin-top: 6px; }
+
+      .rail-footer { padding: 10px 18px; font-size: 11.5px; color: var(--text-muted); border-top: 1px solid var(--line); background: var(--bg-page); }
+
+      /* Legend over the map */
+      .legend-card { position: absolute; left: 12px; bottom: 16px; z-index: 5; background: var(--bg-card); border: 1px solid var(--line);
+        border-radius: var(--radius-md); box-shadow: var(--shadow-control); padding: 10px 12px; max-width: 250px; }
+      .legend-card summary { font: 700 10.5px var(--font-sans); letter-spacing: .14em; text-transform: uppercase; color: var(--text-muted); cursor: pointer; list-style-position: inside; }
+      .legend-card[open] summary { margin-bottom: 6px; }
+      .legend-row { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-ink); padding: 2px 0; }
+      .legend-line { width: 24px; flex: none; border-radius: 2px; }
+      .legend-line.none { background: repeating-linear-gradient(90deg, var(--age-none) 0 5px, transparent 5px 8px) !important; }
+      .legend-toggle { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+
+      .rail-toggle { position: absolute; top: 10px; right: 10px; z-index: 6; display: none; }
+      .map-state { position: absolute; inset: 0; z-index: 7; }
+      .map-state[hidden] { display: none; }
+
+      @media (max-width: 480px) {
+        .app-header.cfr-masthead { padding: 8px 12px; }
+        .app-header .cfr-masthead__title { font-size: 18px; }
+      }
+      @media (max-width: 880px) {
+        .main-content { flex-direction: column; }
+        .map-panel { flex: 1 1 55%; }
+        .rail { width: 100%; flex: 1 1 45%; border-left: none; border-top: 1px solid var(--line); }
+        .rail.collapsed { flex: 0 0 0; overflow: hidden; border-top: none; }
+        .rail-toggle { display: inline-flex; top: auto; bottom: 28px; }
+        .legend-card { max-width: 190px; padding: 8px 10px; }
+      }
+      @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+    </style>
+  </head>
+
+  <body>
+    <div class="app-shell cfr">
+      <header class="app-header cfr-masthead cfr-masthead--admin">
+        <img class="cfr-masthead__mark" src="logo.svg" alt="City of Fair Oaks Ranch seal" />
+        <div class="cfr-masthead__titles">
+          <span class="cfr-eyebrow">City of Fair Oaks Ranch · Public Works</span>
+          <h1 class="cfr-masthead__title">Street Work History</h1>
+        </div>
+      </header>
+
+      <div class="main-content">
+        <div class="map-panel">
+          <arcgis-map basemap="gray-vector" center="-98.69, 29.745" zoom="13">
+            <arcgis-zoom slot="top-left"></arcgis-zoom>
+            <arcgis-home slot="top-left"></arcgis-home>
+            <arcgis-search slot="top-right" include-default-sources-disabled></arcgis-search>
+          </arcgis-map>
+
+          <details class="legend-card" id="legendCard" open>
+            <summary>Last treated</summary>
+            <div id="legendRows"></div>
+            <div class="legend-toggle">
+              <label class="cfr-toggle"><input type="checkbox" id="areaToggle" /> Historic work areas</label>
+            </div>
+          </details>
+
+          <button class="cfr-btn cfr-btn--secondary cfr-btn--small rail-toggle" id="railToggle" aria-expanded="true" aria-controls="rail">Hide list</button>
+          <div class="map-state cfr-state" id="mapState"><div class="cfr-spinner"></div><b>Loading street records…</b></div>
+        </div>
+
+        <aside class="rail" id="rail" aria-label="Street work history">
+          <div class="rail-scroll">
+            <!-- Browse view -->
+            <div class="browse">
+              <div class="rail-section">
+                <p class="rail-intro" id="intro">Completed street maintenance by segment, from City work order records (2018 on) and historic program maps (2008 on).</p>
+              </div>
+              <div class="rail-section">
+                <div class="filters">
+                  <div class="cfr-field full">
+                    <label for="typeFilter">Treatment</label>
+                    <select id="typeFilter"><option value="">All treatments</option></select>
+                  </div>
+                  <div class="cfr-field">
+                    <label for="fromYear">From year</label>
+                    <select id="fromYear"></select>
+                  </div>
+                  <div class="cfr-field">
+                    <label for="toYear">To year</label>
+                    <select id="toYear"></select>
+                  </div>
+                  <div class="filter-actions full">
+                    <span class="rail-intro" id="filterNote">Showing all work on record.</span>
+                    <button class="cfr-btn cfr-btn--outline cfr-btn--small" id="resetFilters" type="button">Reset</button>
+                  </div>
+                </div>
+              </div>
+              <div class="mini-stats" aria-live="polite">
+                <div class="mini-stat"><div class="mini-stat__label">Streets</div><div class="mini-stat__value" id="statStreets">–</div></div>
+                <div class="mini-stat"><div class="mini-stat__label">Treatments</div><div class="mini-stat__value" id="statEvents">–</div></div>
+              </div>
+              <div class="dir-head"><span class="dir-title">Street directory</span><span class="dir-count" id="dirCount"></span></div>
+              <input class="dir-filter" id="dirFilter" type="search" placeholder="Filter streets…" aria-label="Filter streets" />
+              <ul class="dir-list" id="dirList"></ul>
+            </div>
+
+            <!-- Detail view -->
+            <div class="detail" id="detail">
+              <div class="detail-top">
+                <button class="cfr-btn cfr-btn--outline cfr-btn--small" id="backBtn" type="button">← All streets</button>
+              </div>
+              <div class="rail-section">
+                <div class="detail-title" id="detailTitle"></div>
+                <div class="detail-sub" id="detailSub"></div>
+              </div>
+              <div id="detailBody"></div>
+            </div>
+          </div>
+          <div class="rail-footer" id="footer">Public Works · Records are a planning reference; field conditions may differ.</div>
+        </aside>
+      </div>
+    </div>
+
+    <script type="module">
+      const [FeatureLayer, ClassBreaksRenderer, SimpleLineSymbol, SimpleFillSymbol, esriRequest, Extent] = await $arcgis.import([
+        "@arcgis/core/layers/FeatureLayer.js",
+        "@arcgis/core/renderers/ClassBreaksRenderer.js",
+        "@arcgis/core/symbols/SimpleLineSymbol.js",
+        "@arcgis/core/symbols/SimpleFillSymbol.js",
+        "@arcgis/core/request.js",
+        "@arcgis/core/geometry/Extent.js"
+      ]);
+
+      // ------------------------------------------------------------------ config
+      var HOST = "https://services6.arcgis.com/Cnwpb7mZuifVHE6A/arcgis/rest/services";
+      var SERVICE = HOST + "/CoFORPW_PavementTreatment_Public/FeatureServer";   // public view of CoFORPW_PavementTreatment_History
+      var JURIS = HOST + "/FOR_Jurisdictional/FeatureServer/0";
+      var SOURCE_LABEL = { "Cartegraph": "City work order record", "Polygon snapshot": "Historic program map" };
+      var SEG_FIELDS = ["OBJECTID", "CG_SegmentID", "Street", "Segment_Name", "FunctionalClass", "CG_Length_ft",
+        "Completed_Count", "Last_Treatment", "Last_Treatment_Year", "DataAsOf"];
+      var EV_FIELDS = ["CG_SegmentID", "Poly_OID", "Source", "Street", "TreatmentCategory", "WorkTypeRaw", "TreatYear",
+        "CompletionDate", "Pct_of_Segment"];
+
+      var css = getComputedStyle(document.documentElement);
+      function token(name) { return css.getPropertyValue(name).trim(); }
+      var ageColors = [token("--age-1"), token("--age-2"), token("--age-3"), token("--age-4")];
+      var noneColor = token("--age-none");
+
+      var viewEl = document.querySelector("arcgis-map");
+      var searchEl = document.querySelector("arcgis-search");
+      await viewEl.viewOnReady();
+      var view = viewEl.view;
+
+      function setState(html) {
+        var el = document.getElementById("mapState");
+        if (!html) { el.hidden = true; return; }
+        el.hidden = false; el.innerHTML = html;
+      }
+      function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+      function fmtInt(n) { return (n == null || isNaN(n)) ? "–" : Math.round(n).toLocaleString("en-US"); }
+
+      // Centre on the city
+      new FeatureLayer({ url: JURIS }).queryExtent({ where: "1=1" }).then(function (r) {
+        if (r.extent) { view.goTo(r.extent.expand(1.05), { animate: false }); }
+      }).catch(function () { /* keep the safe default centre */ });
+
+      // ------------------------------------------------------------------ discover the view's layers by name
+      var svc;
+      try {
+        svc = (await esriRequest(SERVICE, { query: { f: "json" }, responseType: "json" })).data;
+      } catch (err) {
+        setState("<b>The street records are not available right now.</b><span>Please try again later. If this continues, contact Public Works.</span>");
+        throw err;
+      }
+      function idOf(list, name) {
+        var hit = (list || []).filter(function (l) { return l.name === name; })[0];
+        return hit ? hit.id : null;
+      }
+      var segId = idOf(svc.layers, "Segments");
+      var areaId = idOf(svc.layers, "Treatment_Area");
+      var evId = idOf(svc.tables, "Treatment_Events");
+      if (segId == null || evId == null) {
+        setState("<b>The street records could not be read.</b><span>The service layout changed. Contact Public Works.</span>");
+        throw new Error("Segments or Treatment_Events not found in " + SERVICE);
+      }
+
+      // ------------------------------------------------------------------ load all treatment events (small table)
+      var evLayer = new FeatureLayer({ url: SERVICE + "/" + evId });
+      async function queryAll(layer, where, fields) {
+        var out = [], start = 0, page = 1000;
+        while (true) {
+          var res = await layer.queryFeatures({ where: where, outFields: fields, returnGeometry: false, start: start, num: page, orderByFields: ["OBJECTID"] });
+          res.features.forEach(function (f) { out.push(f.attributes); });
+          if (res.features.length === 0 || (!res.exceededTransferLimit && res.features.length < page)) { break; }
+          start += res.features.length;
+        }
+        return out;
+      }
+      var events;
+      try {
+        events = await queryAll(evLayer, "1=1", EV_FIELDS.concat(["OBJECTID"]));
+      } catch (err) {
+        setState("<b>The street records are not available right now.</b><span>Please try again later.</span>");
+        throw err;
+      }
+
+      // ------------------------------------------------------------------ segments layer + renderer
+      var segLayer = new FeatureLayer({ url: SERVICE + "/" + segId, outFields: SEG_FIELDS, popupEnabled: false, title: "Street segments" });
+      var segInfo = await queryAll(segLayer, "1=1", SEG_FIELDS);
+      var asOf = segInfo.reduce(function (m, s) { return Math.max(m, s.DataAsOf || 0); }, 0);
+      var currentYear = asOf ? new Date(asOf).getFullYear() : new Date().getFullYear();
+      var classes = [
+        { min: currentYear - 3, max: currentYear, label: "In the last 3 years (" + (currentYear - 3) + " or later)" },
+        { min: currentYear - 6, max: currentYear - 4, label: "4 to 6 years ago" },
+        { min: currentYear - 10, max: currentYear - 7, label: "7 to 10 years ago" },
+        { min: 1900, max: currentYear - 11, label: "More than 10 years ago" }
+      ];
+      var widths = [4, 3.5, 3, 3];
+      segLayer.renderer = new ClassBreaksRenderer({
+        field: "Last_Treatment_Year",
+        defaultSymbol: new SimpleLineSymbol({ color: noneColor, width: 2, style: "short-dash" }),
+        defaultLabel: "No record",
+        classBreakInfos: classes.map(function (c, i) {
+          return { minValue: c.min, maxValue: c.max, label: c.label, symbol: new SimpleLineSymbol({ color: ageColors[i], width: widths[i], cap: "round" }) };
+        })
+      });
+      document.getElementById("legendRows").innerHTML = classes.map(function (c, i) {
+        return '<div class="legend-row"><span class="legend-line" style="height:' + widths[i] + 'px;background:' + ageColors[i] + '"></span>' + esc(c.label) + "</div>";
+      }).join("") + '<div class="legend-row"><span class="legend-line none" style="height:2px"></span>No record</div>';
+
+      var areaLayer = null;
+      if (areaId != null) {
+        areaLayer = new FeatureLayer({
+          url: SERVICE + "/" + areaId, visible: false, popupEnabled: false, title: "Historic work areas",
+          outFields: ["Poly_OID", "Segment_Name", "TreatYear", "TreatmentCategory"],
+          renderer: { type: "simple", symbol: new SimpleFillSymbol({ color: [141, 149, 108, 0.18], outline: { color: [104, 115, 77, 0.9], width: 1 } }) }
+        });
+        viewEl.map.add(areaLayer);
+      } else {
+        document.querySelector(".legend-toggle").hidden = true;
+      }
+      viewEl.map.add(segLayer);
+      var segView = await view.whenLayerView(segLayer);
+      var areaView = areaLayer ? await view.whenLayerView(areaLayer) : null;
+      document.getElementById("areaToggle").addEventListener("change", function (e) { if (areaLayer) { areaLayer.visible = e.target.checked; } });
+
+      // ------------------------------------------------------------------ indexes
+      var evBySeg = {}, evByPoly = {};
+      events.forEach(function (e) {
+        if (e.CG_SegmentID) { (evBySeg[e.CG_SegmentID] = evBySeg[e.CG_SegmentID] || []).push(e); }
+        if (e.Poly_OID != null) { (evByPoly[e.Poly_OID] = evByPoly[e.Poly_OID] || []).push(e); }
+      });
+      var segById = {}, streets = {};
+      segInfo.forEach(function (s) {
+        segById[s.CG_SegmentID] = s;
+        var key = s.Street || s.Segment_Name || "Unnamed";
+        (streets[key] = streets[key] || { name: key, segs: [] }).segs.push(s);
+      });
+      var streetList = Object.keys(streets).sort(function (a, b) { return a.localeCompare(b); }).map(function (k) { return streets[k]; });
+
+      var types = {}, years = {};
+      events.forEach(function (e) { if (e.TreatmentCategory) { types[e.TreatmentCategory] = 1; } if (e.TreatYear) { years[e.TreatYear] = 1; } });
+      var typeSel = document.getElementById("typeFilter"), fromSel = document.getElementById("fromYear"), toSel = document.getElementById("toYear");
+      Object.keys(types).sort().forEach(function (t) { typeSel.add(new Option(t, t)); });
+      var yearList = Object.keys(years).map(Number).sort(function (a, b) { return a - b; });
+      var minYear = yearList[0] || currentYear, maxYear = yearList[yearList.length - 1] || currentYear;
+      for (var y = minYear; y <= maxYear; y++) { fromSel.add(new Option(y, y)); toSel.add(new Option(y, y)); }
+      fromSel.value = minYear; toSel.value = maxYear;
+
+      document.getElementById("intro").innerHTML = "Completed street maintenance by segment, from City work order records (2018 on) and historic program maps (" +
+        minYear + " on). <b>Records as of " + (asOf ? new Date(asOf).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" }) : "the latest update") + ".</b>";
+
+      // ------------------------------------------------------------------ filtering
+      var matchSeg = null, matchPoly = null;   // null = no filter
+      function eventMatches(e) {
+        var t = typeSel.value, f = +fromSel.value, to = +toSel.value;
+        return (!t || e.TreatmentCategory === t) && e.TreatYear >= f && e.TreatYear <= to;
+      }
+      function filterActive() { return !!typeSel.value || +fromSel.value !== minYear || +toSel.value !== maxYear; }
+      function applyFilters() {
+        if (+fromSel.value > +toSel.value) { var tmp = fromSel.value; fromSel.value = toSel.value; toSel.value = tmp; }
+        var active = filterActive();
+        var hits = events.filter(eventMatches);
+        matchSeg = active ? {} : null; matchPoly = active ? {} : null;
+        if (active) { hits.forEach(function (e) { if (e.CG_SegmentID) { matchSeg[e.CG_SegmentID] = 1; } if (e.Poly_OID != null) { matchPoly[e.Poly_OID] = 1; } }); }
+        var dim = "opacity(15%) grayscale(100%)";
+        if (active) {
+          var ids = Object.keys(matchSeg);
+          segView.featureEffect = { filter: { where: ids.length ? "CG_SegmentID IN ('" + ids.map(function (i) { return i.replace(/'/g, "''"); }).join("','") + "')" : "1=0" }, excludedEffect: dim };
+          if (areaView) {
+            var pids = Object.keys(matchPoly);
+            areaView.featureEffect = { filter: { where: pids.length ? "Poly_OID IN (" + pids.join(",") + ")" : "1=0" }, excludedEffect: dim };
+          }
+        } else {
+          segView.featureEffect = null;
+          if (areaView) { areaView.featureEffect = null; }
+        }
+        var streetsHit = streetList.filter(streetMatches).length;
+        document.getElementById("statStreets").textContent = fmtInt(streetsHit);
+        document.getElementById("statEvents").textContent = fmtInt(hits.length);
+        document.getElementById("filterNote").textContent = active
+          ? (typeSel.value || "All treatments") + ", " + fromSel.value + "–" + toSel.value
+          : "Showing all work on record.";
+        renderDirectory();
+      }
+      function streetMatches(st) { return !matchSeg || st.segs.some(function (s) { return matchSeg[s.CG_SegmentID]; }); }
+      [typeSel, fromSel, toSel].forEach(function (el) { el.addEventListener("change", applyFilters); });
+      document.getElementById("resetFilters").addEventListener("click", function () {
+        typeSel.value = ""; fromSel.value = minYear; toSel.value = maxYear; applyFilters();
+      });
+
+      // ------------------------------------------------------------------ directory
+      function streetLast(st) {
+        var best = null;
+        st.segs.forEach(function (s) { if (s.Last_Treatment_Year && (!best || s.Last_Treatment_Year > best.Last_Treatment_Year)) { best = s; } });
+        return best;
+      }
+      function ageColor(year) {
+        if (!year) { return noneColor; }
+        for (var i = 0; i < classes.length; i++) { if (year >= classes[i].min && year <= classes[i].max) { return ageColors[i]; } }
+        return noneColor;
+      }
+      function renderDirectory() {
+        var term = document.getElementById("dirFilter").value.trim().toLowerCase();
+        var list = streetList.filter(function (st) { return !term || st.name.toLowerCase().indexOf(term) > -1; });
+        list.sort(function (a, b) { return (streetMatches(b) - streetMatches(a)) || a.name.localeCompare(b.name); });
+        document.getElementById("dirCount").textContent = list.length.toLocaleString("en-US") + " of " + streetList.length.toLocaleString("en-US");
+        document.getElementById("dirList").innerHTML = list.map(function (st) {
+          var last = streetLast(st);
+          return '<li tabindex="0" data-street="' + esc(st.name) + '" class="' + (streetMatches(st) ? "" : "dim") + '">' +
+            '<span class="dir-key" style="background:' + ageColor(last && last.Last_Treatment_Year) + '"></span>' +
+            '<span class="dir-name">' + esc(st.name) + '</span>' +
+            '<span class="dir-meta">' + (last ? esc(last.Last_Treatment) + " · " + last.Last_Treatment_Year : "No record") + "</span></li>";
+        }).join("");
+      }
+      document.getElementById("dirFilter").addEventListener("input", renderDirectory);
+      function onDirActivate(e) {
+        var li = e.target.closest("li[data-street]");
+        if (li) { showStreet(li.getAttribute("data-street"), null, true); }
+      }
+      document.getElementById("dirList").addEventListener("click", onDirActivate);
+      document.getElementById("dirList").addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onDirActivate(e); } });
+
+      // ------------------------------------------------------------------ detail
+      var highlight = null;
+      function historyHtml(list) {
+        if (!list || !list.length) { return '<p class="hist-empty">No completed work on record for this segment.</p>'; }
+        var rows = list.slice().sort(function (a, b) { return (b.TreatYear || 0) - (a.TreatYear || 0); });
+        return '<ul class="hist">' + rows.map(function (e) {
+          var part = (e.Pct_of_Segment != null && e.Pct_of_Segment < 90) ? " · part of the segment (about " + Math.round(e.Pct_of_Segment) + "%)" : "";
+          var match = matchSeg && eventMatches(e) ? ' <span class="cfr-tag cfr-tag--sage">match</span>' : "";
+          return '<li><span class="hist-year">' + esc(e.TreatYear || "–") + '</span><span class="hist-what">' + esc(e.TreatmentCategory || "Treatment") + match + "</span>" +
+            '<span class="hist-note">' + esc(SOURCE_LABEL[e.Source] || e.Source || "") + part + "</span></li>";
+        }).join("") + "</ul>";
+      }
+      function segCard(s, selected) {
+        var len = s.CG_Length_ft >= 1 ? fmtInt(s.CG_Length_ft) + " ft" : "";
+        return '<div class="seg-card' + (selected ? " is-selected" : "") + '" id="seg-' + esc(s.CG_SegmentID) + '"><h3>' + esc(s.Segment_Name || s.Street || "Segment") +
+          "<span>" + len + "</span></h3>" + historyHtml(evBySeg[s.CG_SegmentID]) + "</div>";
+      }
+      async function showStreet(name, selectedSegId, zoom) {
+        var st = streets[name];
+        if (!st) { return; }
+        var rail = document.getElementById("rail");
+        rail.classList.add("show-detail"); rail.classList.remove("collapsed");
+        var last = streetLast(st);
+        document.getElementById("detailTitle").textContent = st.name;
+        document.getElementById("detailSub").textContent = st.segs.length + (st.segs.length === 1 ? " segment" : " segments") +
+          (last ? " · last treated " + last.Last_Treatment_Year + " (" + last.Last_Treatment + ")" : " · no completed work on record");
+        var segs = st.segs.slice().sort(function (a, b) { return (a.Segment_Name || "").localeCompare(b.Segment_Name || ""); });
+        if (selectedSegId) { segs.sort(function (a, b) { return (b.CG_SegmentID === selectedSegId) - (a.CG_SegmentID === selectedSegId); }); }
+        document.getElementById("detailBody").innerHTML = segs.map(function (s) { return segCard(s, s.CG_SegmentID === selectedSegId); }).join("");
+        document.querySelector(".rail-scroll").scrollTop = 0;
+        var where = "Street = '" + name.replace(/'/g, "''") + "'";
+        var res = await segLayer.queryFeatures({ where: where, returnGeometry: true, outFields: ["OBJECTID", "CG_SegmentID"] });
+        if (highlight) { highlight.remove(); }
+        highlight = segView.highlight(res.features);
+        if (zoom && res.features.length) {
+          var ext = res.features.reduce(function (acc, f) { return acc ? acc.union(f.geometry.extent) : f.geometry.extent.clone(); }, null);
+          view.goTo(ext.expand(1.6)).catch(function () {});
+        }
+      }
+      function showArea(polyOid, attrs) {
+        var rail = document.getElementById("rail");
+        rail.classList.add("show-detail"); rail.classList.remove("collapsed");
+        document.getElementById("detailTitle").textContent = (attrs && attrs.Segment_Name) || "Historic work area";
+        document.getElementById("detailSub").textContent = "Area traced from a historic program map";
+        document.getElementById("detailBody").innerHTML = '<div class="seg-card">' + historyHtml(evByPoly[polyOid]) + "</div>";
+        if (highlight) { highlight.remove(); highlight = null; }
+      }
+      document.getElementById("backBtn").addEventListener("click", function () {
+        document.getElementById("rail").classList.remove("show-detail");
+        if (highlight) { highlight.remove(); highlight = null; }
+      });
+
+      // ------------------------------------------------------------------ map interaction
+      viewEl.addEventListener("arcgisViewClick", async function (event) {
+        var hit = await view.hitTest(event.detail, { include: areaLayer && areaLayer.visible ? [segLayer, areaLayer] : [segLayer] });
+        var segHit = hit.results.filter(function (r) { return r.graphic && r.graphic.layer === segLayer; })[0];
+        if (segHit) {
+          var sid = segHit.graphic.attributes.CG_SegmentID, s = segById[sid];
+          if (s) { showStreet(s.Street || s.Segment_Name || "Unnamed", sid, false); }
+          return;
+        }
+        var areaHit = hit.results.filter(function (r) { return r.graphic && r.graphic.layer === areaLayer; })[0];
+        if (areaHit) { showArea(areaHit.graphic.attributes.Poly_OID, areaHit.graphic.attributes); }
+      });
+      viewEl.addEventListener("arcgisViewPointerMove", function (event) {
+        view.hitTest(event.detail, { include: [segLayer] }).then(function (r) { view.container.style.cursor = r.results.length ? "pointer" : ""; });
+      });
+
+      // Search by street name (local index, no geocoder)
+      searchEl.sources = [{
+        name: "Streets", placeholder: "Search a street",
+        getSuggestions: function (params) {
+          var t = params.suggestTerm.toLowerCase();
+          return streetList.filter(function (st) { return st.name.toLowerCase().indexOf(t) > -1; }).slice(0, 8)
+            .map(function (st) { return { key: st.name, text: st.name, sourceIndex: params.sourceIndex }; });
+        },
+        getResults: function (params) {
+          var name = params.suggestResult.key || params.suggestResult.text;
+          showStreet(name, null, true);
+          return Promise.resolve([]);
+        }
+      }];
+
+      document.getElementById("railToggle").addEventListener("click", function () {
+        var rail = document.getElementById("rail"), btn = document.getElementById("railToggle");
+        var collapsed = rail.classList.toggle("collapsed");
+        btn.textContent = collapsed ? "Show list" : "Hide list";
+        btn.setAttribute("aria-expanded", String(!collapsed));
+      });
+
+      if (window.matchMedia("(max-width: 880px)").matches) { document.getElementById("legendCard").removeAttribute("open"); }
+      view.highlightOptions = { color: token("--brand-sky"), haloOpacity: 1, haloColor: token("--brand-navy"), fillOpacity: 0.15 };
+      applyFilters();
+      setState(null);
+    </script>
+  </body>
+</html>
