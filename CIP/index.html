@@ -53,7 +53,7 @@
 
   /* Layout */
   --header-height: 64px;
-  --panel-width: 380px;
+  --panel-width: 400px;
   --radius: 4px;
   --radius-lg: 8px;
 
@@ -169,14 +169,16 @@ button, input { font-family: inherit; font-size: inherit; color: inherit; }
   position: fixed;
   top: var(--header-height);
   left: 0; right: 0; bottom: 0;
-  display: grid;
-  grid-template-columns: 1fr var(--panel-width);
+  display: flex;
 }
 
 #map-area {
   position: relative;
   background: var(--bg-cream-dim);
   overflow: hidden;
+  flex: 1 1 auto;
+  min-width: 0;
+  order: 1;
 }
 
 arcgis-map, #map-view {
@@ -323,16 +325,145 @@ arcgis-map, #map-view {
 }
 
 /* ============================================================================
-   DIRECTORY PANEL (right, 380px)
+   v2.3: RIGHT TAB RAIL + SLIDE-OUT SIDE PANEL (replaces the right directory
+   column and the map popup). Closed on load; opens to Project Details when a
+   feature is selected, or to Project Directory from its tab.
    ============================================================================ */
 
-#directory-panel {
+#panel-rail {
+  order: 3;
+  flex: 0 0 44px;
+  background: var(--forest-green);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding-top: 8px;
+  gap: 4px;
+  z-index: 3;
+}
+
+.rail-tab {
+  background: transparent;
+  border: 0;
+  border-right: 3px solid transparent;
+  color: rgba(250,248,244,0.78);
+  cursor: pointer;
+  writing-mode: vertical-rl;
+  padding: 14px 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  transition: background 150ms ease, color 150ms ease;
+}
+.rail-tab svg { width: 15px; height: 15px; flex-shrink: 0; }
+.rail-tab:hover:not(:disabled) { background: rgba(255,255,255,0.10); color: var(--bg-cream); }
+.rail-tab.active { background: var(--bg-cream); color: var(--forest-green); border-right-color: transparent; border-left: 3px solid var(--olive); }
+.rail-tab:disabled { opacity: 0.4; cursor: default; }
+
+#side-panel {
+  order: 2;
+  flex: 0 0 auto;
+  width: 0;
   background: var(--bg-cream);
   border-left: 1px solid var(--line-strong);
+  overflow: hidden;
+  transition: width 250ms ease;
+  position: relative;
+  z-index: 2;
+}
+#side-panel.open { width: var(--panel-width); }
+
+.panel-inner {
+  width: var(--panel-width);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.panel-view { display: flex; flex-direction: column; min-height: 0; flex: 1; }
+.panel-view[hidden], #directory-view[hidden] { display: none !important; }
+
+.panel-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--line);
+  background: var(--bg-cream);
+  border-radius: var(--radius);
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-size: 18px;
+  line-height: 1;
+  z-index: 2;
+}
+.panel-close:hover { border-color: var(--forest-green); color: var(--forest-green); }
+
+.details-header {
+  padding: 16px 52px 12px 18px;
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.details-back {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin-bottom: 6px;
+  color: var(--forest-green);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.details-back:hover { text-decoration: underline; }
+#details-title {
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--forest-green);
+  line-height: 1.25;
+}
+#details-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px 18px 22px;
+}
+.details-empty { color: var(--ink-muted); font-style: italic; font-size: 13px; padding: 24px 0; }
+.pick-list { display: flex; flex-direction: column; gap: 6px; }
+.pick-item {
+  text-align: left;
+  background: var(--bg-cream-dim);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pick-item:hover { border-color: var(--forest-green); }
+.pick-item .cat-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+#directory-view {
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
+#directory-view .directory-header { padding-right: 52px; }
+
+/* v2.3: search sits in the data bar, left of the "NN mapped projects" text */
+#data-bar .search-wrap { margin-top: 0; flex: 0 0 280px; }
+#data-bar #directory-search { padding-top: 7px; padding-bottom: 7px; background: #fff; }
 
 .directory-header {
   padding: 16px 18px 12px;
@@ -729,10 +860,6 @@ arcgis-map, #map-view {
    MOBILE RESPONSIVE
    ============================================================================ */
 
-#mobile-toggle {
-  display: none;
-}
-
 @media (max-width: 768px) {
   :root {
     --header-height: 56px;
@@ -743,45 +870,6 @@ arcgis-map, #map-view {
   #app-logo { height: 32px; width: 32px; margin-right: 12px; }
   #app-header { padding: 0 14px; }
   .header-btn { padding: 6px 10px; font-size: 11px; }
-
-  #app-main {
-    grid-template-columns: 1fr;
-    grid-template-rows: 1fr auto;
-  }
-
-  #directory-panel {
-    border-left: none;
-    border-top: 1px solid var(--line-strong);
-    max-height: 50vh;
-    transition: max-height 250ms ease;
-  }
-
-  #directory-panel.collapsed {
-    max-height: 56px;
-  }
-
-  #directory-panel.collapsed #directory-list,
-  #directory-panel.collapsed .filter-row,
-  #directory-panel.collapsed .search-wrap,
-  #directory-panel.collapsed .directory-subtitle {
-    display: none;
-  }
-
-  #mobile-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    position: absolute;
-    top: 8px;
-    right: 14px;
-    width: 32px;
-    height: 32px;
-    background: transparent;
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    cursor: pointer;
-    color: var(--ink-soft);
-  }
 
   #stats-panel {
     top: 8px;
@@ -838,13 +926,13 @@ arcgis-map, #map-view {
   background: var(--ink-muted);
 }
 
-/* v2.2-PUBLIC-R1: public build mirrored from IIS beta v2.2-IIS-BETA-R1 (internal links removed; CFOR public palette). */
+/* v2.2-PUBLIC-R1: public build mirrored from IIS beta v2.2-IIS-BETA-R1 (internal links removed; CFOR public palette). v2.3-PUBLIC-R1: side panel layout (CIP-PANEL-R1). */
 
 .header-btn{text-decoration:none;min-height:40px;display:inline-flex;align-items:center}.header-btn:disabled{opacity:.65}button,input,select{font:inherit}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid var(--olive);outline-offset:2px}
-#data-notice{position:fixed;top:64px;left:0;right:0;padding:7px 18px;background:#F0EDE4;border-bottom:1px solid var(--line);font-size:11px;line-height:1.4;z-index:500;min-height:45px}#app-main{top:109px}
+#data-bar{position:fixed;top:64px;left:0;right:0;height:45px;padding:0 18px;background:#F0EDE4;border-bottom:1px solid var(--line);z-index:500;display:flex;align-items:center;gap:14px}#data-notice{flex:1;min-width:0;font-size:11px;line-height:1.4;max-height:44px;overflow:hidden}#app-main{top:109px}
 .directory-header{max-height:44vh;overflow:auto}.extra-filters{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:6px;padding:8px 18px;border-bottom:1px solid var(--line);flex-shrink:0}.extra-filters select{min-height:38px;min-width:0;border:1px solid var(--line-strong);background:#fff;border-radius:6px}.extra-filters label{font-size:11px}.filter-chip{min-height:36px}
-.directory-item{display:block;width:100%;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--line);font:inherit}.directory-item .di-name,.di-budget{display:block}.di-meta{flex-wrap:wrap}.cip-meta-row{gap:16px;align-items:flex-start}.cip-meta-row .value{text-align:right;overflow-wrap:anywhere;max-width:68%}.cip-description{white-space:pre-wrap}.stats-footer{font-size:11px}#directory-panel{position:relative}#mobile-toggle{z-index:2;min-width:40px;min-height:40px}.stats-body{max-height:55vh;overflow:auto}
-@media(max-width:768px){#app-header{height:64px;padding:0 8px}#app-title{font-size:14px}#app-subtitle{font-size:9px}#header-actions{gap:4px;margin-left:4px}.header-btn{padding:4px 6px;font-size:10px}.guide-link{display:none}#app-logo{height:32px;width:35px;margin-right:6px}#data-notice{top:64px;font-size:10px;padding:5px 8px;height:58px;overflow:auto}#app-main{top:122px;grid-template-rows:minmax(160px,1fr) minmax(0,48%)}#app-main:has(#directory-panel.collapsed){grid-template-rows:minmax(160px,1fr) 56px}#directory-panel{max-height:none;min-height:0}.directory-header{padding-right:55px;max-height:23vh}#directory-panel.collapsed .extra-filters{display:none}.extra-filters{padding:6px 10px;grid-template-columns:auto 1fr;font-size:11px}.extra-filters select{min-height:32px}.filter-chip{min-height:32px}.stats-body{max-height:40vh}#stats-panel.collapsed{max-width:44px;max-height:44px}#stats-toggle{min-height:44px}}
+.directory-item{display:block;width:100%;text-align:left;background:transparent;border:0;border-bottom:1px solid var(--line);font:inherit}.directory-item .di-name,.di-budget{display:block}.di-meta{flex-wrap:wrap}.cip-meta-row{gap:16px;align-items:flex-start}.cip-meta-row .value{text-align:right;overflow-wrap:anywhere;max-width:68%}.cip-description{white-space:pre-wrap}.stats-footer{font-size:11px}.stats-body{max-height:55vh;overflow:auto}
+@media(max-width:768px){#app-header{height:64px;padding:0 8px}#app-title{font-size:14px}#app-subtitle{font-size:9px}#header-actions{gap:4px;margin-left:4px}.header-btn{padding:4px 6px;font-size:10px}.guide-link{display:none}#app-logo{height:32px;width:35px;margin-right:6px}#data-bar{top:64px;height:66px;padding:6px 8px;flex-wrap:wrap;align-content:center;gap:4px}#data-bar .search-wrap{flex:1 1 100%}#data-notice{flex:1 1 100%;font-size:10px;white-space:nowrap;text-overflow:ellipsis}#app-main{top:130px;flex-direction:column}#map-area{order:1;flex:1 1 auto;min-height:160px}#panel-rail{order:2;flex:0 0 44px;flex-direction:row;padding:0;gap:0}.rail-tab{writing-mode:horizontal-tb;flex:1;padding:0 8px;border-right:0;border-left:0;border-top:3px solid transparent}.rail-tab.active{border-left:0;border-top-color:var(--olive)}#side-panel{order:3;width:100%;height:0;border-left:0;transition:height 250ms ease}#side-panel.open{width:100%;height:48%}.panel-inner{width:100%}.directory-header{max-height:23vh}.extra-filters{padding:6px 10px;grid-template-columns:auto 1fr;font-size:11px}.extra-filters select{min-height:32px}.filter-chip{min-height:32px}.stats-body{max-height:40vh}#stats-panel.collapsed{max-width:44px;max-height:44px}#stats-toggle{min-height:44px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 
 </style>
@@ -878,7 +966,73 @@ arcgis-map, #map-view {
 <!-- ============================================================================
      MAIN
      ============================================================================ -->
-<p id="data-notice" role="status">Loading project data…</p><main id="app-main">
+<div id="data-bar">
+  <div class="search-wrap">
+    <svg class="search-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="7" cy="7" r="5"/>
+      <path d="M11 11l3 3" stroke-linecap="round"/>
+    </svg>
+    <input type="text" id="directory-search" aria-label="Search projects" placeholder="Search projects…" autocomplete="off">
+  </div>
+  <p id="data-notice" role="status">Loading project data…</p>
+</div>
+<main id="app-main">
+
+  <!-- v2.3 tab rail (always visible) -->
+  <nav id="panel-rail" aria-label="Side panel">
+    <button class="rail-tab" id="tab-directory" type="button" data-view="directory" aria-controls="side-panel" aria-expanded="false">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 4h12M2 8h12M2 12h12"/></svg>
+      <span>Project Directory</span>
+    </button>
+    <button class="rail-tab" id="tab-details" type="button" data-view="details" aria-controls="side-panel" aria-expanded="false" disabled title="Select a project on the map or in the directory">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 7.5v4M8 4.8v.2"/></svg>
+      <span>Project Details</span>
+    </button>
+  </nav>
+
+  <!-- v2.3 slide-out side panel: project details (replaces the map popup) or the directory -->
+  <aside id="side-panel" aria-label="Project information">
+    <div class="panel-inner">
+      <button class="panel-close" id="panel-close" type="button" aria-label="Close panel">×</button>
+
+      <section class="panel-view" id="details-view" hidden aria-labelledby="details-title">
+        <div class="details-header">
+          <button class="details-back" id="details-back" type="button">← Project Directory</button>
+          <h2 id="details-title" tabindex="-1">Project Details</h2>
+        </div>
+        <div id="details-body" aria-live="polite"><p class="details-empty">Select a project on the map or in the directory.</p></div>
+      </section>
+
+      <section class="panel-view" id="directory-view" hidden>
+    <div class="directory-header">
+      <div class="directory-title">Project Directory</div>
+      <div class="directory-subtitle"><span id="dir-count">—</span> projects</div>
+
+
+      <div class="filter-row" id="category-filters">
+        <button class="filter-chip active" data-cat="all">All</button>
+        <button class="filter-chip" data-cat="Water"><span class="chip-dot" style="background:#B0C1C9"></span>Water</button>
+        <button class="filter-chip" data-cat="Wastewater"><span class="chip-dot" style="background:#192737"></span>Wastewater</button>
+        <button class="filter-chip" data-cat="Roadway"><span class="chip-dot" style="background:#8D956C"></span>Roadway</button>
+        <button class="filter-chip" data-cat="Drainage"><span class="chip-dot" style="background:#717C60"></span>Drainage</button>
+        <button class="filter-chip" data-cat="Building"><span class="chip-dot" style="background:#A64850"></span>Building</button>
+      </div>
+
+      <div class="filter-row" id="status-filters">
+        <button class="filter-chip" data-status="all">All lifecycles</button>
+        <button class="filter-chip active" data-status="current">Active</button>
+        <button class="filter-chip" data-status="completed">Completed</button>
+<button class="filter-chip" data-status="unknown">Unspecified</button>
+      </div>
+    </div>
+
+<div class="extra-filters"><label for="phase-filter">Phase</label><select id="phase-filter"><option value="all">All phases</option><option>Design</option><option>Procurement</option><option>Construction</option><option>Unspecified</option></select><label for="health-filter">Project status</label><select id="health-filter"><option value="all">All statuses</option><option>Not Started</option><option>On Track</option><option>Minor Disruption</option><option>Major Disruption</option><option>Complete</option><option>Canceled</option><option>Unspecified</option></select></div>
+    <div id="directory-list" aria-live="polite">
+      <div id="directory-loading">Loading projects…</div>
+    </div>
+      </section>
+    </div>
+  </aside>
 
   <!-- Map area -->
   <div id="map-area">
@@ -918,49 +1072,6 @@ arcgis-map, #map-view {
       </div>
     </div>
   </div>
-
-  <!-- Directory panel (right) -->
-  <aside id="directory-panel">
-    <button id="mobile-toggle" type="button" aria-label="Toggle directory">
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
-        <path d="M3 5l5 5 5-5"/>
-      </svg>
-    </button>
-
-    <div class="directory-header">
-      <div class="directory-title">Project Directory</div>
-      <div class="directory-subtitle"><span id="dir-count">—</span> projects</div>
-
-      <div class="search-wrap">
-        <svg class="search-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="7" cy="7" r="5"/>
-          <path d="M11 11l3 3" stroke-linecap="round"/>
-        </svg>
-        <input type="text" id="directory-search" aria-label="Search projects" placeholder="Search projects…" autocomplete="off">
-      </div>
-
-      <div class="filter-row" id="category-filters">
-        <button class="filter-chip active" data-cat="all">All</button>
-        <button class="filter-chip" data-cat="Water"><span class="chip-dot" style="background:#B0C1C9"></span>Water</button>
-        <button class="filter-chip" data-cat="Wastewater"><span class="chip-dot" style="background:#192737"></span>Wastewater</button>
-        <button class="filter-chip" data-cat="Roadway"><span class="chip-dot" style="background:#8D956C"></span>Roadway</button>
-        <button class="filter-chip" data-cat="Drainage"><span class="chip-dot" style="background:#717C60"></span>Drainage</button>
-        <button class="filter-chip" data-cat="Building"><span class="chip-dot" style="background:#A64850"></span>Building</button>
-      </div>
-
-      <div class="filter-row" id="status-filters">
-        <button class="filter-chip" data-status="all">All lifecycles</button>
-        <button class="filter-chip active" data-status="current">Active</button>
-        <button class="filter-chip" data-status="completed">Completed</button>
-<button class="filter-chip" data-status="unknown">Unspecified</button>
-      </div>
-    </div>
-
-<div class="extra-filters"><label for="phase-filter">Phase</label><select id="phase-filter"><option value="all">All phases</option><option>Design</option><option>Procurement</option><option>Construction</option><option>Unspecified</option></select><label for="health-filter">Project status</label><select id="health-filter"><option value="all">All statuses</option><option>Not Started</option><option>On Track</option><option>Minor Disruption</option><option>Major Disruption</option><option>Complete</option><option>Canceled</option><option>Unspecified</option></select></div>
-    <div id="directory-list" aria-live="polite">
-      <div id="directory-loading">Loading projects…</div>
-    </div>
-  </aside>
 </main>
 
 <!-- ============================================================================
@@ -970,7 +1081,11 @@ arcgis-map, #map-view {
 
 <script>
 /* ============================================================================
-   CIP MAP v2.2-PUBLIC-R1 (2026-11-03, mirrors IIS beta v2.2-IIS-BETA-R1) - Application Logic
+   CIP MAP v2.3-PUBLIC-R1 (2026-11-20, CIP-PANEL-R1) - Application Logic
+   v2.3 (2026-11-20, requested by Grant Watanabe, Director of Public Works, and Kelsey Delgado,
+   City Project Manager): map popups replaced by a right-side slide-out side panel with Project Details and
+   Project Directory tabs on an always-visible tab rail; panel closed on load; search moved to the data bar.
+   Based on v2.2-PUBLIC-R1 (mirrors IIS beta v2.2-IIS-BETA-R1); the IIS beta has not yet received this change.
    v2.1 (2026-10-26): initial view fits all projects with padding for the stats card
    (was padded on the wrong side); popup opens by OBJECTID; Current/Completed from
    Lifecycle; popup shows PSR fields (phase, status, next milestone, estimated budget,
@@ -1164,14 +1279,14 @@ require([
   }
 
   // ============================================================================
-  // POPUP TEMPLATE
+  // PROJECT DETAILS (v2.3: rendered in the side panel instead of a map popup)
   // ============================================================================
 
-  function buildPopupTemplate() {
+  function buildDetails(a) {
     const e=escapeHtml;
     const row=(label,value)=>`<div class="cip-meta-row"><span class="label">${e(label)}</span><span class="value">${e(value || 'Not reported')}</span></div>`;
-    return new PopupTemplate({title:'{ProjectName}',outFields:['*'],content:({graphic})=>{
-      const a=graphic.attributes,cat=a.Category || 'Other',color=CATEGORY_COLORS[cat] || '#68734D',pct=progressOf(a),url=safeUrl(a.ProjectURL);
+    {
+      const cat=a.Category || 'Other',color=CATEGORY_COLORS[cat] || '#68734D',pct=progressOf(a),url=safeUrl(a.ProjectURL);
       const root=document.createElement('div');root.className='cip-popup';
       root.innerHTML=`<div class="cip-popup-header"><span class="cip-badge cat">${e(cat)}</span><span class="cip-badge">${e(lifecycleLabel(a))}</span></div>
       <div class="cip-section"><div class="cip-section-label">Milestones complete</div><div class="cip-progress-row"><div class="cip-progress-bar"><div class="cip-progress-fill" style="width:${pct || 0}%;background:${color}"></div></div><strong>${pct===null?'Not reported':Math.round(pct)+'%'}</strong></div>
@@ -1184,7 +1299,7 @@ require([
       ${row('Last changed sync',a.LastSynced?formatDate(a.LastSynced):'Not reported')}
       ${url?`<a class="cip-link" href="${e(url)}" target="_blank" rel="noopener noreferrer">Open project page ↗</a>`:''}`;
       return root;
-    }});
+    }
   }
 
   // Lifecycle is supplied by the PSR folder; unspecified remains explicit.
@@ -1356,7 +1471,8 @@ require([
       <span class="di-meta">${escapeHtml(a.Phase || 'Phase unspecified')} · ${escapeHtml(a.HealthStatus || 'Status unspecified')}</span>
       <span class="di-progress"><span class="di-progress-bar"><span class="di-progress-fill" style="display:block;width:${pct || 0}%;background:${color}"></span></span><span>${pct===null?'Not reported':Math.round(pct)+'% milestones'}</span></span>
       <span class="di-budget">${numberLabel(a.BudgetAllocated)} allocated · ${numberLabel(a.BudgetSpent)} spent</span>`;
-      item.addEventListener('click',()=>zoomToProject(p,item));list.append(item);
+      item._project=p;if(p===state.selected)item.classList.add('selected');
+      item.addEventListener('click',()=>zoomToProject(p));list.append(item);
     });
     renderStats();applyMapFilters();
   }
@@ -1369,9 +1485,9 @@ require([
     }).sort((a,b)=>String(a.attributes.ProjectName||'').localeCompare(String(b.attributes.ProjectName||'')));
   }
 
-  async function zoomToProject(p,item) {
+  async function zoomToProject(p) {
     const seq=state.selectionSequence=(state.selectionSequence || 0)+1;
-    document.querySelectorAll('.directory-item.selected').forEach(el=>el.classList.remove('selected'));item.classList.add('selected');state.selected=p;
+    showProject(p);
     try{
       const features=(await Promise.all(Object.entries(state.layers).map(async([type,layer])=>{
         const ids=p.members.filter(f=>f._geomType===type).map(f=>f.attributes.OBJECTID);
@@ -1382,9 +1498,120 @@ require([
       await state.view.goTo(withGeometry,{duration:500});
       if(seq!==state.selectionSequence)return;
       if(state.view.zoom>18)state.view.zoom=18;
-      const g=withGeometry[0].geometry;
-      state.view.openPopup({features:withGeometry,location:g.type==='point'?g:g.extent.center});
     }catch(e){if(e.name!=='AbortError'&&seq===state.selectionSequence)showNotice('Could not open that location. Try again.');}
+  }
+
+
+  // ============================================================================
+  // SIDE PANEL (v2.3) - tab rail, slide-out panel, map selection
+  // ============================================================================
+
+  function isMobile() { return window.innerWidth <= 768; }
+
+  function openPanel(view) {
+    const panel=document.getElementById('side-panel'),wasOpen=panel.classList.contains('open');
+    state.panelView=view;
+    document.getElementById('details-view').hidden=view!=='details';
+    document.getElementById('directory-view').hidden=view!=='directory';
+    document.querySelectorAll('.rail-tab').forEach(t=>{const on=t.dataset.view===view;t.classList.toggle('active',on);t.setAttribute('aria-expanded',String(on));});
+    if(!wasOpen){
+      // Narrow frames (e.g. the ~990px city website embed): fold the statistics card so the map stays usable
+      const stats=document.getElementById('stats-panel'),main=document.getElementById('app-main');
+      if(!isMobile()&&!stats.classList.contains('collapsed')&&main.clientWidth-44-(parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--panel-width'))||400)<700){
+        stats.classList.add('collapsed');document.getElementById('stats-toggle').setAttribute('aria-expanded','false');state.statsAutoCollapsed=true;
+      }
+      panel.classList.add('open');
+      setTimeout(()=>{if(state.view)state.view.padding=mapPadding();},260);
+    }
+  }
+
+  function closePanel() {
+    document.getElementById('side-panel').classList.remove('open');
+    document.querySelectorAll('.rail-tab').forEach(t=>{t.classList.remove('active');t.setAttribute('aria-expanded','false');});
+    if(state.statsAutoCollapsed){
+      document.getElementById('stats-panel').classList.remove('collapsed');document.getElementById('stats-toggle').setAttribute('aria-expanded','true');state.statsAutoCollapsed=false;
+    }
+    setTimeout(()=>{if(state.view)state.view.padding=mapPadding();},260);
+  }
+
+  function setHighlight(p) {
+    (state.highlights||[]).forEach(h=>h.remove());state.highlights=[];
+    if(!p)return;
+    Object.entries(state.layerViews||{}).forEach(([type,lv])=>{
+      const ids=p.members.filter(f=>f._geomType===type).map(f=>f.attributes.OBJECTID);
+      if(lv&&ids.length)state.highlights.push(lv.highlight(ids));
+    });
+  }
+
+  function markDirectory(p) {
+    document.querySelectorAll('.directory-item').forEach(el=>el.classList.toggle('selected',!!p&&el._project===p));
+  }
+
+  function showProject(p) {
+    state.selected=p;
+    document.getElementById('details-title').textContent=p.attributes.ProjectName||'Unnamed project';
+    document.getElementById('details-body').replaceChildren(buildDetails(p.attributes));
+    document.getElementById('details-body').scrollTop=0;
+    const tab=document.getElementById('tab-details');tab.disabled=false;tab.removeAttribute('title');
+    setHighlight(p);markDirectory(p);openPanel('details');
+  }
+
+  // Several projects under one click: list them in the panel and let the user pick
+  function showChoices(projects) {
+    state.selected=null;setHighlight(null);markDirectory(null);
+    document.getElementById('details-title').textContent=projects.length+' projects at this location';
+    const list=document.createElement('div');list.className='pick-list';
+    projects.forEach(p=>{
+      const b=document.createElement('button');b.type='button';b.className='pick-item';
+      const dot=document.createElement('span');dot.className='cat-dot';dot.style.background=CATEGORY_COLORS[p.attributes.Category]||'#68734D';
+      b.append(dot,document.createTextNode(p.attributes.ProjectName||'Unnamed project'));
+      b.addEventListener('click',()=>showProject(p));list.append(b);
+    });
+    document.getElementById('details-body').replaceChildren(list);
+    openPanel('details');
+  }
+
+  function clearSelection() {
+    state.selectionSequence=(state.selectionSequence || 0)+1;
+    state.selected=null;setHighlight(null);markDirectory(null);
+    document.getElementById('details-title').textContent='Project Details';
+    const empty=document.createElement('p');empty.className='details-empty';empty.textContent='Select a project on the map or in the directory.';
+    document.getElementById('details-body').replaceChildren(empty);
+    const tab=document.getElementById('tab-details');tab.disabled=true;tab.title='Select a project on the map or in the directory';
+    if(state.panelView==='details'&&document.getElementById('side-panel').classList.contains('open'))closePanel();
+  }
+
+  function projectForFeature(type,oid) {
+    return state.filtered.find(p=>p.members.some(f=>f._geomType===type&&f.attributes.OBJECTID===oid));
+  }
+
+  async function hitProjects(event) {
+    const layers=Object.values(state.layers);
+    const res=await state.view.hitTest(event,{include:layers});
+    const typeOf=layer=>Object.keys(state.layers).find(k=>state.layers[k]===layer);
+    const found=[];
+    res.results.forEach(r=>{
+      if(!r.graphic||!r.graphic.layer)return;
+      const p=projectForFeature(typeOf(r.graphic.layer),r.graphic.attributes&&r.graphic.attributes.OBJECTID);
+      if(p&&!found.includes(p))found.push(p);
+    });
+    return found;
+  }
+
+  function setupMapSelection() {
+    state.view.on('click',async event=>{
+      const seq=state.selectionSequence=(state.selectionSequence || 0)+1;
+      try{
+        const found=await hitProjects(event);
+        if(seq!==state.selectionSequence)return;
+        if(found.length===1)showProject(found[0]);else if(found.length>1)showChoices(found);
+      }catch(e){console.warn('Selection failed:',e);}
+    });
+    let pending=false;
+    state.view.on('pointer-move',event=>{
+      if(pending||event.pointerType==='touch')return;pending=true;
+      hitProjects(event).then(f=>{state.view.container.style.cursor=f.length?'pointer':'';}).catch(()=>{}).finally(()=>{pending=false;});
+    });
   }
 
   // ============================================================================
@@ -1445,7 +1672,7 @@ require([
   function showNotice(text) {document.getElementById('data-notice').textContent=text;}
   async function refreshProjects() {
     const button=document.getElementById('reload-projects');button.disabled=true;showNotice('Loading all three public layers…');
-    try{await loadAllProjects();renderDirectory();await fitToProjects(0);showDataNotice();}
+    try{await loadAllProjects();clearSelection();renderDirectory();await fitToProjects(0);showDataNotice();}
     catch(e){showNotice((state.loadedAt?'Reload failed; showing the previous complete load. ':'Projects could not load. ')+(e.message||e));}
     finally{button.disabled=false;}
   }
@@ -1469,16 +1696,21 @@ require([
     document.getElementById('reload-projects').addEventListener('click',refreshProjects);
     const stats=document.getElementById('stats-toggle');stats.setAttribute('aria-expanded',String(!document.getElementById('stats-panel').classList.contains('collapsed')));
     stats.addEventListener('click',()=>{const collapsed=document.getElementById('stats-panel').classList.toggle('collapsed');stats.setAttribute('aria-expanded',String(!collapsed));setTimeout(()=>{state.view.padding=mapPadding();},260);});
-    const mobile=document.getElementById('mobile-toggle');mobile.setAttribute('aria-expanded','true');mobile.addEventListener('click',()=>{const collapsed=document.getElementById('directory-panel').classList.toggle('collapsed');mobile.setAttribute('aria-expanded',String(!collapsed));});
+    document.querySelectorAll('.rail-tab').forEach(tab=>tab.addEventListener('click',()=>{
+      const open=document.getElementById('side-panel').classList.contains('open');
+      if(open&&state.panelView===tab.dataset.view)closePanel();else openPanel(tab.dataset.view);
+    }));
+    document.getElementById('panel-close').addEventListener('click',closePanel);
+    document.getElementById('details-back').addEventListener('click',()=>openPanel('directory'));
+    document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.getElementById('side-panel').classList.contains('open'))closePanel();});
+    document.getElementById('stats-toggle').addEventListener('click',()=>{state.statsAutoCollapsed=false;});
     document.getElementById('reset-view-btn').addEventListener('click',()=>fitToProjects(500));
     window.addEventListener('resize',()=>{if(state.view)state.view.padding=mapPadding();});
   }
 
   function applyMapFilters() {
-    state.selectionSequence=(state.selectionSequence || 0)+1;
-    if(state.view)state.view.closePopup();
-    state.selected=null;
-    document.querySelectorAll('.directory-item.selected').forEach(el=>el.classList.remove('selected'));
+    // v2.3: keep the open project unless the filters now hide it
+    if(state.selected&&!state.filtered.includes(state.selected))clearSelection();
     Object.entries(state.layers).forEach(([type,layer])=>{
       if(!layer)return;
       const ids=[...new Set(state.filtered.flatMap(p=>p.members.filter(f=>f._geomType===type).map(f=>f.attributes.OBJECTID)))];
@@ -1493,7 +1725,6 @@ require([
 
   async function init() {
     // Create Map and MapView directly (imperative pattern — more reliable than web component)
-    const popupTemplate = buildPopupTemplate();
     const labelInfo = buildLabelInfo("above-center");
     const lineLabelInfo = buildLabelInfo("center-along");
     const polyLabelInfo = buildLabelInfo("always-horizontal");
@@ -1502,7 +1733,7 @@ require([
       url: POINT_LAYER_URL, definitionExpression: "1=0",
       renderer: buildPointRenderer(),
       labelingInfo: labelInfo,
-      popupTemplate: popupTemplate,
+      popupEnabled: false,
       title: "CIP Projects — Points",
       outFields: ["*"]
     });
@@ -1511,7 +1742,7 @@ require([
       url: LINE_LAYER_URL, definitionExpression: "1=0",
       renderer: buildLineRenderer(),
       labelingInfo: lineLabelInfo,
-      popupTemplate: popupTemplate,
+      popupEnabled: false,
       title: "CIP Projects — Lines",
       outFields: ["*"]
     });
@@ -1520,7 +1751,7 @@ require([
       url: POLY_LAYER_URL, definitionExpression: "1=0",
       renderer: buildPolygonRenderer(),
       labelingInfo: polyLabelInfo,
-      popupTemplate: popupTemplate,
+      popupEnabled: false,
       title: "CIP Projects — Polygons",
       outFields: ["*"]
     });
@@ -1537,10 +1768,7 @@ require([
       map: state.map,
       center: [-98.629, 29.748],  // Initial safe center on Fair Oaks Ranch
       zoom: 13,
-      popup: {
-        dockEnabled: false,
-        dockOptions: { breakpoint: false }
-      },
+      popupEnabled: false,   // v2.3: details open in the side panel
       ui: {
         components: ["zoom", "compass", "attribution"]
       }
@@ -1554,6 +1782,9 @@ require([
 
     // Setup UI handlers
     setupUI();
+    state.layerViews={};
+    await Promise.all(Object.entries(state.layers).map(async([type,layer])=>{state.layerViews[type]=await state.view.whenLayerView(layer);}));
+    setupMapSelection();
 
     // Load project data via direct REST (for directory + stats), then fit the view to it
     await refreshProjects();

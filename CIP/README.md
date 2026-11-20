@@ -4,12 +4,12 @@
 |---|---|
 | App | Capital Improvement Projects map, public read-only viewer |
 | Public URL | https://cofor-gis.github.io/gis-maps/CIP/ |
-| Version | `v2.2-PUBLIC-R1` (2026-11-03) |
+| Version | `v2.3-PUBLIC-R1` (2026-11-20, Ref CIP-PANEL-R1) |
 | Built from | Internal IIS beta `v2.2-IIS-BETA-R1` at `gis.local/CIP/beta/` (internal only, not reachable from the internet) |
 | Owner | Ernie Martz, GIS Administrator, Engineering Services |
 | Project lead | City Project Manager (CIP), Public Works |
 | Stack | Single-file static HTML, ArcGIS Maps SDK for JavaScript 4.34 (CDN), no sign-in |
-| Status | Live. Functionality mirrors the IIS beta; internal links removed |
+| Status | Live. v2.3 side-panel layout is ahead of the IIS beta (beta still v2.2 layout) until it is ported; internal links removed |
 | Replaces | The 12 ClearGov-era documents formerly in this folder (removed 2026-11-03; still in git history) |
 
 ## 1. Purpose
@@ -17,11 +17,13 @@ A public map of the City's capital improvement projects (water, wastewater, road
 
 What the viewer does:
 - Map of all mapped projects (points, lines, areas), colored by category, with "NN% milestones" labels.
-- **Project Directory** with search, category chips, lifecycle chips (All lifecycles / Active / Completed / Unspecified; Active is the default), and Phase and Project status dropdowns.
+- **Right tab rail** (always visible) with **Project Directory** and **Project Details** tabs. On the right edge; the side panel is closed on load, slides out to the left of the tabs and pushes the map over, so the map stays visible.
+- **Project Directory** tab with category chips, lifecycle chips (All lifecycles / Active / Completed / Unspecified; Active is the default), and Phase and Project status dropdowns.
 - **Project Statistics** panel showing filtered project count, filtered allocated budget, amount spent and a count by category.
-- Popups show category, phase, status, status update, progress, next milestone, budget and timeline. A "project page" link appears only for projects whose City web page has been marked live.
-- Data bar: "NN mapped projects · Data loaded HH:MM Central", plus **Reload data** and **Reset View** buttons.
-- Phone layout: stacked map and directory, with a collapsible statistics panel.
+- Clicking a project on the map (or in the directory) opens **Project Details** in the side panel instead of a map popup: category, phase, status, status update, progress, next milestone, budget and timeline. A "project page" link appears only for projects whose City web page has been marked live. Where several projects overlap, the panel lists them to pick from. Esc or × closes the panel.
+- On narrow screens (about 1,150px and below, including the city website embed) the statistics card folds when the panel opens and returns when it closes.
+- Data bar: **Search projects** box on the left, then "NN mapped projects · Data loaded HH:MM Central". Search filters the map, statistics and directory. **Reload data** and **Reset View** are in the header.
+- Phone layout: map on top, a two-tab bar below it, and the side panel opening under the tab bar; the statistics panel starts collapsed.
 
 This public build is the IIS beta with three differences:
 1. No **GIS Hub** or **PM guide** buttons.
@@ -34,7 +36,7 @@ This public build is the IIS beta with three differences:
 | Public page | `CoFOR-GIS/gis-maps` → `CIP/index.html`, served at https://cofor-gis.github.io/gis-maps/CIP/ |
 | Logo / favicon | `CIP/logo.svg` (copy of the root `logo.svg` on gis.local; lowercase name required, because GitHub Pages is case-sensitive) |
 | This document | `CIP/README.md` (the only document in this folder) |
-| Functional source of truth | Internal IIS beta `gis.local/CIP/beta/`. Change features there first, then rebuild this public copy (Procedure 4.1) |
+| Functional source of truth | Internal IIS beta `gis.local/CIP/beta/`. Change features there first, then rebuild this public copy (Procedure 4.1). Exception (Ernie, 2026-11-20, CIP-PANEL-R1): because Claude built the CIP map and its sync, Claude may make an approved CIP change here first; ChatGPT then copies it to the beta so the two stay in step |
 | PM how-to guide | Internal IIS (`gis.local/CIP/beta/guide/`). Never linked from the public build |
 | Sync job and its records | Ernie's workstation, `C:\GIS\CIP_Sync\` (internal) |
 | Cross-agent records | `CoFOR-GIS/gis-ops` (private): `log/AI_COORDINATION.md`, `log/CLOUD_CHANGES.md` |
@@ -106,6 +108,7 @@ The data layer is not touched by this repo, so a rollback affects only the page.
 ## 7. Change log
 | Date | Version | Change | By |
 |---|---|---|---|
+| 2026-11-20 | v2.3-PUBLIC-R1 (CIP-PANEL-R1) | Map popup replaced by a right-side slide-out side panel (Project Details / Project Directory tabs on a tab rail; closed on load); search moved into the data bar; stats card folds on narrow screens while the panel is open. Requested verbally 2026-11-20 by Grant Watanabe (Director of Public Works: popup cut off and too narrow) and Kelsey Delgado (City Project Manager); layout proposed by Ernie. Not yet ported to the IIS beta | Claude (at Ernie's direction) |
 | 2026-11-03 | v2.2-PUBLIC-R1 (commit `add746e`) | Public build now mirrors the IIS beta v2.2-IIS-BETA-R1: lifecycle/phase/status filters, filtered totals, data bar with Reload data, milestone-based progress labels, phone layout. GIS Hub / PM guide links and the gis.local theme removed. Added lowercase `logo.svg`, which fixes the favicon 404 | Claude (at Ernie's direction) |
 | 2026-11-03 | docs | Replaced the 12 ClearGov-era documents with this single README in the standard 7-section format; removed the unused `Logo.svg` | Claude |
 | 2026-10-26 | v2.1.2 (`430ddef`) | Zoom to project from directory; label placement | — |
